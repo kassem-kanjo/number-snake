@@ -14,9 +14,19 @@ Play it in your browser at **https://kassem-kanjo.github.io/number-snake/**, or 
 - The Pause, Restart and Fullscreen buttons do the same as the keys.
 - The Speed slider sets how fast the simulation runs. The calm pace runs at 60% of the Outbreak pace for the same setting.
 - It starts at a calm pace meant for leaving it running: outbreaks are rare, small and slow, at most two at a time. The Outbreak button switches to more, bigger and faster infections, several at once, and back.
+- The Hunter and Warden buttons take that defender off the grid or put it back. One always stays: asking the last one to leave brings the other back instead. A defender left on its own gets as worked up as it needs to and may divide, even the warden.
 - Adding `?saver=1` to the address shows the grid and nothing else and ignores input. The Mac screensaver uses this.
 - Record saves a video clip of the grid. Press it once to start and again to stop; the file downloads when you stop.
 - The "run" number in the bar is a link to that exact run. Opening it replays the same run, as long as the window is the same size and you don't steer or drop infections.
+
+## Downloads
+
+For a Mac there is a double-clickable app and a screensaver that plays when the Mac is idle. Get both from the [latest release](https://github.com/kassem-kanjo/number-snake/releases/latest):
+
+- **Number-Snake-mac-app.zip**: unzip and drag Number Snake to Applications.
+- **Number-Snake-screensaver.zip**: unzip, double-click the `.saver` file, then choose Number Snake in System Settings under Screen Saver.
+
+They are not notarised by Apple, so the first time you open them macOS will warn you. [mac/README.md](mac/README.md) explains how to open them anyway, how to remove them, and how to build them from source. On Windows or Linux, use the link above in a browser and press F for fullscreen.
 
 ## What you are looking at
 
