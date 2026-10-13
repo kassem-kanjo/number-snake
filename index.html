@@ -37,7 +37,8 @@
   <button id="restart">Restart</button>
   <label>Speed <input id="speed" type="range" min="4" max="140" value="55"></label>
   <a id="seed" class="hint" title="Link to this exact run"></a>
-  <span class="hint">Hold the mouse down to steer · hover an infection to read its nature · space = pause · R = restart</span>
+  <span id="tally" class="hint"></span>
+  <span class="hint">hold to steer · double-click to infect · hover to inspect · space pauses · R restarts</span>
 </div>
 <script>
 (() => {
@@ -73,7 +74,7 @@
   let life, born, num, edge, vigor, tint, hurt;
   let germ, germHit, owner;
   let colonies, byId, nextId, infected, pressure, pressureGoal, pressureTimer;
-  let arcs, stain, motes, scar;
+  let arcs, stain, motes, scar, cleared;
   const born_ = [];   // spores that landed this tick
   let tickNo, heads, head, target = null;   // `head` is whichever head is acting right now
   let paused = false;
@@ -89,6 +90,7 @@
   }
   let asked = typeof location === 'undefined' ? NaN : parseInt(new URLSearchParams(location.search).get('seed'), 10);
   const seedLink = document.getElementById('seed');
+  const tally = document.getElementById('tally');
 
   const rand = (a, b) => a + random() * (b - a);
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -136,7 +138,8 @@
     colonies = [];
     arcs = [];
     scar = new Int32Array(n);      // where infection was eaten stays faintly marked for a while
-    motes = [];                    // flecks thrown off when a colony dies
+    motes = [];
+    cleared = 0;                    // flecks thrown off when a colony dies
     stain = new Int32Array(n);     // creature cells that just swallowed something
     byId = new Map();
     nextId = 1;
@@ -170,9 +173,10 @@
 
   function layout() {
     const w = stage.clientWidth - 32, h = stage.clientHeight - 24;
-    px = Math.max(9, Math.min(13, Math.round(Math.min(w, h) / 78)));
-    cols = Math.max(12, Math.floor(w / px));
-    rows = Math.max(12, Math.floor(h / px));
+    const px2 = Math.max(9, Math.min(13, Math.round(Math.min(w, h) / 78)));
+    const cols2 = Math.max(12, Math.floor(w / px2)), rows2 = Math.max(12, Math.floor(h / px2));
+    if (heads && px2 === px && cols2 === cols && rows2 === rows) return;   // same grid: keep the run
+    px = px2; cols = cols2; rows = rows2;
     dpr = window.devicePixelRatio || 1;
     canvas.style.width = cols * px + 'px';
     canvas.style.height = rows * px + 'px';
@@ -224,9 +228,13 @@
     const most = area * 0.55;
     if (budget === undefined) budget = 20 * Math.pow(most / 20, t.greed);
     const share = budget / most;
-    const pool = GLYPH_POOL.split('').sort(() => random() - 0.5);
+    const pool = GLYPH_POOL.split('');
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
     const c = {
-      id: nextId++, traits: t, gen: 0, cells: [], count: 0, age: 0, acc: 0, blocked: 0,
+      id: nextId++, traits: t, gen: 0, cells: [], held: new Set(), count: 0, age: 0, acc: 0, blocked: 0,
       budget, energy: budget,            // cells it can ever grow; it can't win, it runs dry
       growth: t.growth * (1 + 4 * share),
       armour: t.armour,
@@ -274,10 +282,11 @@
     if (x < 0 || y < 0 || x >= cols || y >= rows) return -1;
     const i = y * cols + x;
     if (germ[i]) return -1;
+    // a cell it held before is still in its list from last time
+    if (!c.held.has(i)) { c.cells.push(i); c.held.add(i); }
     germ[i] = hp;
     germHit[i] = -1e9;
     owner[i] = c.id;
-    c.cells.push(i);
     c.count++;
     infected++;
     return i;
@@ -423,12 +432,17 @@
       y = Math.floor(rand(6, rows - 6));
       head = nearestHead(x, y);
     } while ((germ[y * cols + x] || Math.hypot(x - head.x, y - head.y) < 25) && ++tries < 30);
-    if (germ[y * cols + x]) return;
+    plant(x, y);
+  }
+
+  function plant(x, y) {
+    if (x < 0 || y < 0 || x >= cols || y >= rows || germ[y * cols + x] || colonies.length >= MAX_COLONIES) return;
     const c = buildColony(rollTraits());
     colonies.push(c);
     byId.set(c.id, c);
     addCell(c, x, y, 1 + (random() < c.armour));
     c.energy--;
+    head = nearestHead(x, y);
     survey(c);
   }
 
@@ -446,7 +460,10 @@
     for (const c of colonies) {
       if (c.count <= 0) continue;
       c.age++;
-      if (c.cells.length > c.count * 1.5 + 24) c.cells = c.cells.filter(i => alive(c, i));
+      if (c.cells.length > c.count * 1.5 + 24) {
+        c.cells = c.cells.filter(i => alive(c, i));
+        c.held = new Set(c.cells);
+      }
       head = nearestHead(c.cx, c.cy);   // a colony reacts to whichever head is closest
       survey(c);
       if (c.energy > 0) {
@@ -464,6 +481,7 @@
     born_.length = 0;
     for (const c of colonies) {
       if (c.count > 0) continue;
+      cleared++;
       // the bigger it got, the more it scatters when it goes
       for (let n = 4 + Math.sqrt(c.budget - c.energy); n > 0; n--) {
         const a = rand(0, Math.PI * 2), v = rand(0.15, 0.9);
@@ -746,7 +764,7 @@
     }
 
     h.sick *= 0.996;
-    speed *= 1 - 0.6 * h.sick;
+    speed *= 1 - 0.4 * h.sick;
     h.v += (speed - h.v) * (h.mode === 'strike' ? 0.4 : 0.12);
     h.r += (h.rGoal - h.r) * swell;
     // the more infection there is, the bigger it gets; a withering head shrinks away
@@ -791,11 +809,11 @@
           if (germ[i] === 1) {
             removeCell(c, i); ate++;
             stain[i] = tickNo + rand(8, 30);
-            scar[i] = tickNo + rand(300, 900);
+            scar[i] = tickNo + rand(150, 450);
             if (random() < c.venom) {
               // poison: the mouthful shows as corruption, and it adds up
               hurt[i] = tickNo + rand(20, 60);
-              h.sick = Math.min(1, h.sick + 0.012);
+              h.sick = Math.min(1, h.sick + 0.008);
             }
           }
           else { germ[i]--; c.blocked++; }
@@ -935,7 +953,7 @@
       for (let x = 0; x < cols; x++) {
         const i = y * cols + x;
         if (scar[i] > tickNo && life[i] <= 0 && !germ[i]) {
-          ctx.globalAlpha = 0.55 * Math.min(1, (scar[i] - tickNo) / 300);
+          ctx.globalAlpha = 0.3 * Math.min(1, (scar[i] - tickNo) / 150);
           ctx.fillStyle = '#f3b9c6';
           ctx.fillRect(x * px, y * px, px, px);
           ctx.globalAlpha = 1;
@@ -990,6 +1008,8 @@
       }
     }
     drawColonyGlyphs();
+
+    tally.textContent = `cleared ${cleared} · alive ${colonies.length}` + (heads.length > 1 ? ` · split in ${heads.length}` : '');
   }
 
   // ----------------------------------------------------------------- controls
@@ -1018,7 +1038,12 @@
   pauseBtn.onclick = togglePause;
   document.getElementById('restart').onclick = restart;
   addEventListener('keydown', e => {
-    if (e.code === 'Space') { e.preventDefault(); togglePause(); }
+    if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;   // leave browser shortcuts alone
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();   // or a focused button fires too
+      togglePause();
+    }
     if (e.key === 'r' || e.key === 'R') restart();
   });
 
@@ -1026,10 +1051,18 @@
     const b = canvas.getBoundingClientRect();
     target = { x: (e.clientX - b.left) / px, y: (e.clientY - b.top) / px };
   }
-  canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture(e.pointerId); pointAt(e); });
+  canvas.addEventListener('pointerdown', e => { if (e.button !== 0) return; canvas.setPointerCapture(e.pointerId); pointAt(e); });
   canvas.addEventListener('pointermove', e => { if (target) pointAt(e); });
   canvas.addEventListener('pointerup', () => { target = null; });
   canvas.addEventListener('pointercancel', () => { target = null; });
+  addEventListener('blur', () => { target = null; });
+  // double-click drops a new infection where you clicked
+  canvas.addEventListener('dblclick', e => {
+    const b = canvas.getBoundingClientRect();
+    plant(Math.floor((e.clientX - b.left) / px), Math.floor((e.clientY - b.top) / px));
+    head = heads[0];
+    draw();
+  });
 
   // ------------------------------------------------------------ hover inspector
   // Hover an infected cell (mouse up) to read that colony's nature. One line
@@ -1103,6 +1136,7 @@
   window.snake = {
     get head() { return heads[0]; },
     get heads() { return heads; },
+    get cleared() { return cleared; },
     get colonies() { return colonies; },
     get infected() { return infected / area; },
     tick, draw, restart,
