@@ -4,7 +4,7 @@ A grid of small numbered cells with a blue creature, shaped after a white blood 
 
 ## How to run it
 
-Open `index.html` in any web browser. There is nothing to install.
+Play it in your browser at **https://kassem-kanjo.github.io/number-snake/**, or download this repository and open `index.html`. There is nothing to install.
 
 - Hold the mouse button down to steer the creature toward the pointer. Let go and it goes back to its own behaviour.
 - Hover over an infected cell (button up) to read that infection's nature in a small panel. Hover over the creature to see what it is doing and how it feels.
@@ -13,7 +13,8 @@ Open `index.html` in any web browser. There is nothing to install.
 - Space pauses and resumes. R restarts with a new grid. F enters and leaves fullscreen, where only the grid shows and even the dot hides while the mouse is still.
 - The Pause, Restart and Fullscreen buttons do the same as the keys.
 - The Speed slider sets how many simulation steps run per second.
-- It starts at a calm pace meant for leaving it running: outbreaks are rare, small and slow, at most two at a time. The Busy button switches to more, bigger and faster infections, several at once, and back.
+- It starts at a calm pace meant for leaving it running: outbreaks are rare, small and slow, at most two at a time. The Outbreak button switches to more, bigger and faster infections, several at once, and back.
+- Adding `?saver=1` to the address shows the grid and nothing else and ignores input. The Mac screensaver uses this.
 - Record saves a video clip of the grid. Press it once to start and again to stop; the file downloads when you stop.
 - The "run" number in the bar is a link to that exact run. Opening it replays the same run, as long as the window is the same size and you don't steer or drop infections.
 
@@ -85,7 +86,7 @@ When heat gets high enough, the creature can pinch into several heads, up to a f
 
 ## Testing
 
-Run `node bench.js [ticks] [cols] [rows] [busy]` from the project folder. It tests the calm default; add the word `busy` to test busy mode. `node bench.js --check` is the quick pass/fail version that runs on every pull request. It needs only Node, not a browser. The defaults are 200000 ticks on a 90 by 60 grid. It runs the simulation headless and prints JSON:
+Run `node bench.js [ticks] [cols] [rows] [outbreak]` from the project folder. It tests the calm default; add the word `outbreak` to test outbreak mode. `node bench.js --check` is the quick pass/fail version that runs on every pull request. It needs only Node, not a browser. The defaults are 200000 ticks on a 90 by 60 grid. It runs the simulation headless and prints JSON:
 
 - `ticks`: the number of steps run.
 - `outbreaksCleared`: infections that were fully eaten or died out during the run.

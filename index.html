@@ -33,13 +33,17 @@
   body.fs canvas { border-radius: 0; }
   body.quiet #dock { opacity: 0; }
   body.quiet canvas { cursor: none; }
+  /* screensaver view: the grid and nothing else, deaf to input */
+  body.saver #dock, body.saver #tip { display: none; }
+  body.saver #stage { padding: 0; }
+  body.saver canvas { border-radius: 0; cursor: none; pointer-events: none; }
   button { font: inherit; color: #ddd; background: #1c1c20; border: 1px solid #333; border-radius: 7px; padding: 7px 12px; cursor: pointer; }
   button:hover { background: #26262b; }
   button.live { border-color: #e3122b; color: #ff8a98; }
   label { display: flex; gap: 8px; align-items: center; }
   input[type=range] { width: 120px; accent-color: #2f6fe4; }
   .hint { opacity: .7; }
-  button.on { border-color: #2f6fe4; color: #9fc0ff; }
+  button.on { border-color: #e3122b; color: #ff8a98; }
   #seed { color: inherit; text-decoration: none; border-bottom: 1px dotted #555; }
   #tip { position: fixed; left: 0; top: 0; z-index: 5; display: none; width: 236px; box-sizing: border-box; padding: 9px 10px;
          background: #141417; border: 1px solid #333; border-radius: 8px; color: #c4c4ca; font-size: 11px; line-height: 1;
@@ -64,7 +68,7 @@
         <button id="pause">Pause</button>
         <button id="restart">Restart</button>
         <button id="record" title="Save a video clip of the grid">Record</button>
-        <button id="busy" title="More, bigger and faster infections, several at once">Busy</button>
+        <button id="outbreak" title="More, bigger and faster infections, several at once">Outbreak</button>
         <button id="full" title="Nothing but the grid (F)">Fullscreen</button>
         <label>Speed <input id="speed" type="range" min="4" max="140" value="55"></label>
         <a id="seed" class="hint" title="Link to this exact run"></a>
@@ -130,9 +134,13 @@
   let asked = parseInt(query.get('seed'), 10);
 
   // The default pace is calm, for leaving it running: outbreaks are rare,
-  // small and slow, at most two at a time. Busy mode lifts all of that.
-  let ambient = query.get('busy') !== '1';
-  const seedHref = () => '?seed=' + seed + (ambient ? '' : '&busy=1');
+  // small and slow, at most two at a time. Outbreak mode lifts all of that.
+  let ambient = query.get('outbreak') !== '1';
+
+  // `saver=1` is the view the screensaver uses: no controls, no cursor, no input.
+  const saver = query.get('saver') === '1';
+  if (saver && document.body) document.body.classList.add('saver');
+  const seedHref = () => '?seed=' + seed + (ambient ? '' : '&outbreak=1');
   const seedLink = document.getElementById('seed');
   const tally = document.getElementById('tally');
 
@@ -209,7 +217,7 @@
   }
 
   function layout() {
-    const full = !!document.fullscreenElement;
+    const full = saver || !!document.fullscreenElement;
     const w = stage.clientWidth - (full ? 0 : 32), h = stage.clientHeight - (full ? 0 : 50);
     const px2 = Math.max(9, Math.min(13, Math.round(Math.min(w, h) / 78)));
     const cols2 = Math.max(12, Math.floor(w / px2)), rows2 = Math.max(12, Math.floor(h / px2));
@@ -1128,7 +1136,7 @@
   pauseBtn.onclick = togglePause;
   document.getElementById('restart').onclick = restart;
   addEventListener('keydown', e => {
-    if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;   // leave browser shortcuts alone
+    if (saver || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;   // leave browser shortcuts alone
     if (e.code === 'Space') {
       e.preventDefault();
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();   // or a focused button fires too
@@ -1285,13 +1293,13 @@
     recordBtn.classList.add('live');
   };
 
-  const busyBtn = document.getElementById('busy');
+  const outbreakBtn = document.getElementById('outbreak');
   function setAmbient(on) {
     ambient = on;
-    busyBtn.classList.toggle('on', !on);
+    outbreakBtn.classList.toggle('on', !on);
     seedLink.href = seedHref();
   }
-  busyBtn.onclick = () => setAmbient(!ambient);
+  outbreakBtn.onclick = () => setAmbient(!ambient);
   setAmbient(ambient);
 
   // The panel opens to whatever size its contents need.

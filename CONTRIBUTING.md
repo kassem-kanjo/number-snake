@@ -13,10 +13,10 @@
 ## Checking a change
 
 ```bash
-node bench.js 200000 90 60 busy
+node bench.js 200000 90 60 outbreak
 ```
 
-Run it before and after, at least twice each, because every run uses a new seed. Busy mode is the demanding one, so it is the one to compare. Expectations on the default 90 by 60 grid:
+Run it before and after, at least twice each, because every run uses a new seed. Outbreak mode is the demanding one, so it is the one to compare. Expectations on the default 90 by 60 grid:
 
 | Field | Healthy range |
 |---|---|
@@ -41,7 +41,7 @@ node bench.js --check
 ```
 
 ```bash
-node bench.js --check 80000 90 60 busy
+node bench.js --check 80000 90 60 outbreak
 ```
 
 It fails if the script throws, if bookkeeping drifts, if no outbreak is cleared, or if an outbreak survives far longer than any normal one.
