@@ -15,10 +15,22 @@
   label { display: flex; gap: 8px; align-items: center; }
   input[type=range] { width: 120px; accent-color: #2f6fe4; }
   .hint { opacity: .7; }
+  #tip { position: fixed; left: 0; top: 0; z-index: 5; display: none; width: 236px; box-sizing: border-box; padding: 9px 10px;
+         background: #141417; border: 1px solid #333; border-radius: 8px; color: #c4c4ca; font-size: 11px; line-height: 1;
+         box-shadow: 0 4px 14px rgba(0,0,0,.45); pointer-events: none; }
+  #tip .row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  #tip .row:first-child { margin-top: 0; }
+  #tip .name { flex: 0 0 108px; white-space: nowrap; }
+  #tip .bar { position: relative; flex: 1; height: 5px; background: #26262b; border-radius: 3px; overflow: hidden; }
+  #tip .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: #e3122b; border-radius: 3px; }
+  #tip .bar.mid::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: #777; }
+  #tip .val { flex: 0 0 auto; color: #ddd; }
+  #tip .sep { height: 1px; background: #2c2c31; margin: 8px 0 2px; }
 </style>
 </head>
 <body>
 <div id="stage"><canvas id="c"></canvas></div>
+<div id="tip"></div>
 <div id="bar">
   <button id="pause">Pause</button>
   <button id="restart">Restart</button>
@@ -948,6 +960,69 @@
   canvas.addEventListener('pointermove', e => { if (target) pointAt(e); });
   canvas.addEventListener('pointerup', () => { target = null; });
   canvas.addEventListener('pointercancel', () => { target = null; });
+
+  // ------------------------------------------------------------ hover inspector
+  // Hover an infected cell (mouse up) to read that colony's nature. One line
+  // per trait; to show another trait later, add one line to SHOWN.
+  const SHOWN = [               // [trait, plain-English label]
+    ['greed',  'spreads'],
+    ['growth', 'grows fast'],
+    ['armour', 'armour'],
+    ['spite',  'hits back'],
+    ['nerve',  'runs away'],
+    ['tips',   'tendrils'],
+    ['lure',   'seeks / avoids you'],
+    ['drive',  'drifts one way'],
+    ['spore',  'spores'],
+  ];
+  const tip = document.getElementById('tip');
+  let hover = null;             // last mouse position over the canvas, or null
+
+  function tipRow(name, frac, text, mid) {
+    return '<div class="row"><span class="name">' + name + '</span>' +
+      (frac === null ? '<span class="bar" style="visibility:hidden"></span>' :
+        '<span class="bar' + (mid ? ' mid' : '') + '"><i style="width:' + (100 * clamp(frac, 0, 1)).toFixed(0) + '%"></i></span>') +
+      (text === '' ? '' : '<span class="val">' + text + '</span>') + '</div>';
+  }
+
+  function colonyAt(clientX, clientY) {
+    const b = canvas.getBoundingClientRect();
+    const x = Math.floor((clientX - b.left) / px), y = Math.floor((clientY - b.top) / px);
+    if (x < 0 || y < 0 || x >= cols || y >= rows) return null;
+    const i = y * cols + x;
+    return germ[i] > 0 ? byId.get(owner[i]) || null : null;
+  }
+
+  function showTip() {
+    const c = hover && !target ? colonyAt(hover.x, hover.y) : null;
+    if (!c) { tip.style.display = 'none'; return; }
+    let html = '';
+    for (const [key, name] of SHOWN) {
+      if (!TRAITS[key] || typeof c.traits[key] !== 'number') continue;   // unknown trait: skip
+      const [lo, hi] = TRAITS[key];
+      html += tipRow(name, (c.traits[key] - lo) / (hi - lo), '', lo < 0);
+    }
+    html += '<div class="sep"></div>';
+    html += tipRow('cells', null, c.count, false);
+    html += tipRow('generation', null, c.gen, false);
+    html += tipRow('energy left', c.energy / c.budget, Math.round(100 * clamp(c.energy / c.budget, 0, 1)) + '%', false);
+    html += tipRow('hits left', null, Math.max(0, Math.floor(c.fury)), false);
+    tip.innerHTML = html;
+    tip.style.display = 'block';
+    // sit beside the cursor, flipped or nudged so it stays inside the window
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    let left = hover.x + 16, top = hover.y + 16;
+    if (left + w > window.innerWidth - 8) left = hover.x - 16 - w;
+    if (top + h > window.innerHeight - 8) top = hover.y - 16 - h;
+    tip.style.left = Math.max(8, left) + 'px';
+    tip.style.top = Math.max(8, top) + 'px';
+  }
+
+  canvas.addEventListener('pointermove', e => { hover = { x: e.clientX, y: e.clientY }; showTip(); });
+  canvas.addEventListener('pointerleave', () => { hover = null; showTip(); });
+  canvas.addEventListener('pointerdown', () => showTip());   // steering hides it
+  // the colony changes every tick (and the sim may be paused), so refresh on its own loop
+  (function tipLoop() { if (hover) showTip(); requestAnimationFrame(tipLoop); })();
 
   let resizeTimer;
   addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(layout, 150); });
