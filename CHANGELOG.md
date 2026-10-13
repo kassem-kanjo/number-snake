@@ -4,6 +4,8 @@ Notable changes to Number Snake. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-13
+
 ### Added
 - `skip=N` in the address starts a run N ticks in, so a link can open mid-action.
 
