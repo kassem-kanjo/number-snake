@@ -15,12 +15,12 @@
   label { display: flex; gap: 8px; align-items: center; }
   input[type=range] { width: 120px; accent-color: #2f6fe4; }
   .hint { opacity: .7; }
-  #tip { position: fixed; left: 0; top: 0; z-index: 5; display: none; width: 190px; box-sizing: border-box; padding: 9px 10px;
+  #tip { position: fixed; left: 0; top: 0; z-index: 5; display: none; width: 236px; box-sizing: border-box; padding: 9px 10px;
          background: #141417; border: 1px solid #333; border-radius: 8px; color: #c4c4ca; font-size: 11px; line-height: 1;
          box-shadow: 0 4px 14px rgba(0,0,0,.45); pointer-events: none; }
   #tip .row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
   #tip .row:first-child { margin-top: 0; }
-  #tip .name { flex: 0 0 74px; }
+  #tip .name { flex: 0 0 108px; white-space: nowrap; }
   #tip .bar { position: relative; flex: 1; height: 5px; background: #26262b; border-radius: 3px; overflow: hidden; }
   #tip .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: #e3122b; border-radius: 3px; }
   #tip .bar.mid::after { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: #777; }
