@@ -57,7 +57,7 @@
   const BANDS = [0.72, 0.52, 0.34, 0.17];   // life fractions where the colour changes
 
   const STAIN = ['#6a5bd0', '#8e3f9e', '#b3245f'];   // a swallowed cell dissolving, last to first
-  const BLACK = '#0a0a0a', RED = '#e3122b', BLOOD = '#7a0613', PINK = '#ff5a6e';
+  const BLACK = '#0a0a0a', RED = '#e3122b', BLOOD = '#7a0613', PINK = '#ff5a6e', SOUR = '#c214a8';
   const GLYPH_POOL = '0123456789#X%/\\<>=+*?!:;[]{}^~';
 
   const STEP = 0.65;       // cells the head moves per tick at an easy pace
@@ -163,6 +163,7 @@
       heat: 0,          // anger plus how much of the grid is infected
       memory: [],       // where it last fed
       stretch: 1,
+      sick: 0,          // poison in its system: slows and shrinks it until it wears off
       vitality: 1,      // a split-off head withers once things calm down
     };
   }
@@ -196,6 +197,8 @@
     lure:   [-1, 1],          // grows toward (+) or away from (-) the creature
     drive:  [0, 1],           // creeps in one direction
     spore:  [0, 1],           // how readily it throws off offspring
+    hush:   [0, 1],           // how well it hides its scent
+    venom:  [0, 1],           // how sick it makes whatever eats it
   };
 
   function rollTraits() {
@@ -203,6 +206,7 @@
       greed: skew(2.4), growth: 0.4 + 4.6 * skew(1.6), armour: skew(2.2),
       spite: skew(2.2), nerve: skew(2.4), tips: random(),
       lure: rand(-1, 1), drive: skew(2), spore: skew(3),
+      hush: skew(2.4), venom: skew(2.4),
     };
   }
 
@@ -230,16 +234,17 @@
       nerve: t.nerve, stamina: 1,        // it tires as it runs
       tips: t.tips, lure: t.lure,
       drive: t.drive, heading: rand(0, Math.PI * 2),
-      spore: t.spore,
+      spore: t.spore, hush: t.hush, venom: t.venom,
       noticed: false, near: Infinity, nearest: 0, cx: 0, cy: 0,
       x0: 0, x1: 0, y0: 0, y1: 0,
     };
     // its look follows from its nature, so you can read it before it acts
     c.look = {
-      slot: Math.max(1, Math.round(10 - 8 * t.nerve + rand(-1, 1))),    // jumpy ones flicker fast
-      red: clamp(0.3 + 0.5 * share + 0.3 * (c.growth / 8) + rand(-0.12, 0.12), 0.15, 0.95),
+      slot: Math.max(1, Math.round(10 - 8 * t.nerve + 8 * t.hush + rand(-1, 1))),   // jumpy ones flicker fast, quiet ones slowly
+      red: clamp((0.3 + 0.5 * share + 0.3 * (c.growth / 8) + rand(-0.12, 0.12)) * (1 - 0.6 * t.hush), 0.1, 0.95),   // quiet ones stay dark
+      sour: t.venom,                                                  // poisonous ones show magenta
       white: 0.1 + 0.7 * t.spite,                                       // spiteful ones spark white
-      tears: 0.15 + 0.85 * t.spite,
+      tears: (0.15 + 0.85 * t.spite) * (1 - t.hush),
       glyphs: pool.slice(0, 2 + Math.floor(rand(0, 8))).join(''),
     };
     return c;
@@ -648,7 +653,8 @@
     // a colony's scent spreads the longer it's been there and the bigger it is
     for (const c of colonies) {
       if (c.count > 0) survey(c);   // distances as this head sees them
-      if (!c.noticed && c.near < 18 + c.age * 0.15 + Math.sqrt(c.count)) c.noticed = true;
+      const scent = (18 + c.age * 0.15 + Math.sqrt(c.count)) * (1 - 0.75 * c.hush);
+      if (!c.noticed && c.near < scent) c.noticed = true;
     }
     const known = colonies.filter(c => c.noticed && c.count > 0);
     if (h.prey && h.prey.count <= 0) h.prey = null;
@@ -739,14 +745,16 @@
       }
     }
 
+    h.sick *= 0.996;
+    speed *= 1 - 0.6 * h.sick;
     h.v += (speed - h.v) * (h.mode === 'strike' ? 0.4 : 0.12);
     h.r += (h.rGoal - h.r) * swell;
     // the more infection there is, the bigger it gets; a withering head shrinks away
-    h.R = h.r * (1 + 0.6 * hot) * Math.min(1, h.vitality * 3);
+    h.R = h.r * (1 + 0.6 * hot) * Math.min(1, h.vitality * 3) * (1 - 0.3 * h.sick);
     h.lobe += 0.05;
 
-    h.x += Math.cos(h.a) * h.v;
-    h.y += Math.sin(h.a) * h.v;
+    h.x = clamp(h.x + Math.cos(h.a) * h.v, 1, cols - 1);
+    h.y = clamp(h.y + Math.sin(h.a) * h.v, 1, rows - 1);
     h.path.push({ x: h.x, y: h.y });
     if (h.path.length > TAIL) h.path.shift();
   }
@@ -780,7 +788,16 @@
           // one layer per pass: armoured cells take several attacks
           germHit[i] = tickNo;
           const c = byId.get(owner[i]);
-          if (germ[i] === 1) { removeCell(c, i); ate++; stain[i] = tickNo + rand(8, 30); scar[i] = tickNo + rand(300, 900); }
+          if (germ[i] === 1) {
+            removeCell(c, i); ate++;
+            stain[i] = tickNo + rand(8, 30);
+            scar[i] = tickNo + rand(300, 900);
+            if (random() < c.venom) {
+              // poison: the mouthful shows as corruption, and it adds up
+              hurt[i] = tickNo + rand(20, 60);
+              h.sick = Math.min(1, h.sick + 0.012);
+            }
+          }
           else { germ[i]--; c.blocked++; }
         }
         const inward = 1 - Math.max(u, 0);
@@ -866,7 +883,9 @@
     const hp = germ[i];
     const dark = 1 - c.look.red * (hp === 1 ? 1 : hp === 2 ? 0.35 : 0.08);
     const f = (r % 1000) / 1000;
-    return f < dark ? BLACK : f < dark + (1 - dark) * 0.8 ? RED : BLOOD;
+    if (f < dark) return BLACK;
+    if (f > 1 - (1 - dark) * 0.2) return BLOOD;
+    return (r >>> 22) % 100 < 100 * c.look.sour ? SOUR : RED;
   }
 
   function drawColonies() {
@@ -1025,6 +1044,8 @@
     ['lure',   'seeks / avoids you'],
     ['drive',  'drifts one way'],
     ['spore',  'spores'],
+    ['hush',   'hides'],
+    ['venom',  'poisonous'],
   ];
   const tip = document.getElementById('tip');
   let hover = null;             // last mouse position over the canvas, or null
