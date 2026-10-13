@@ -683,7 +683,7 @@
     }
 
     // aim a little way inside the nearest edge of the prey
-    let dist = 0, bearing = h.a;
+    let dist = 0, bearing = h.a, aimWall = Infinity;
     if (h.prey) {
       const c = h.prey;
       const nx = c.nearest % cols + 0.5, ny = Math.floor(c.nearest / cols) + 0.5;
@@ -691,6 +691,7 @@
       const ax = nx + (c.cx - nx) * t, ay = ny + (c.cy - ny) * t;
       dist = Math.hypot(ax - h.x, ay - h.y);
       bearing = Math.atan2(ay - h.y, ax - h.x);
+      aimWall = Math.min(ax, ay, cols - ax, rows - ay);
     }
 
     // its nucleus leans toward whatever has its attention
@@ -775,6 +776,20 @@
     h.beat += 0.06 + 0.1 * h.arousal + 0.25 * hot;
     h.R = h.r * (1 + 0.55 * hot) * Math.min(1, h.vitality * 3) * (1 - 0.3 * h.sick) * (1 + 0.05 * Math.sin(h.beat));
     h.lobe += 0.05;
+
+    // It keeps its body on the grid: near a wall it turns and eases back in,
+    // unless what it is after is up against that wall.
+    const room = Math.min(h.R, 9);
+    const hunting = h.mode === 'approach' || h.mode === 'windup' || h.mode === 'strike';
+    if (!(hunting && aimWall < room + 2)) {
+      const inX = h.x < room ? room - h.x : h.x > cols - room ? cols - room - h.x : 0;
+      const inY = h.y < room ? room - h.y : h.y > rows - room ? rows - room - h.y : 0;
+      if (inX || inY) {
+        turnToward(Math.atan2(inY, inX), 0.2);
+        h.x += inX * 0.08;
+        h.y += inY * 0.08;
+      }
+    }
 
     h.x = clamp(h.x + Math.cos(h.a) * h.v, 3, cols - 3);
     h.y = clamp(h.y + Math.sin(h.a) * h.v, 3, rows - 3);
@@ -1132,7 +1147,10 @@
   function headAt(clientX, clientY) {
     const b = canvas.getBoundingClientRect();
     const x = (clientX - b.left) / px, y = (clientY - b.top) / px;
-    return heads.find(h => Math.hypot(h.x - x, h.y - y) < h.R) || null;
+    return heads.find(h => {
+      const dx = x - h.x, dy = y - h.y, ca = Math.cos(h.a), sa = Math.sin(h.a);
+      return Math.hypot((dx * ca + dy * sa) / h.stretch, (dy * ca - dx * sa) * Math.sqrt(h.stretch)) < h.R;
+    }) || null;
   }
 
   const DOING = {
