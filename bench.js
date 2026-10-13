@@ -31,11 +31,13 @@ new Function(script)();
 const s = global.snake;
 
 const seen = new Map(), lives = [], modes = {};
-let maxInfected = 0, several = 0, maxGen = 0;
+let maxInfected = 0, several = 0, maxGen = 0, maxHeads = 0, split = 0;
 for (let t = 0; t < ticks; t++) {
   s.tick();
   if (s.infected > maxInfected) maxInfected = s.infected;
   if (s.colonies.length > 1) several++;
+  if (s.heads.length > 1) split++;
+  if (s.heads.length > maxHeads) maxHeads = s.heads.length;
   modes[s.head.mode] = (modes[s.head.mode] || 0) + 1;
   const ids = new Set();
   for (const c of s.colonies) {
@@ -60,4 +62,6 @@ console.log(JSON.stringify({
   severalAtOncePct: pct(several),
   maxInfectedPct: Math.round(100 * maxInfected),
   maxGeneration: maxGen,
+  splitPct: pct(split),
+  maxHeads,
 }, null, 1));

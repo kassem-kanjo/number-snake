@@ -53,6 +53,7 @@
   const TAIL = 105;        // ticks a cell under the very centre of the head survives
   const HIT_GAP = 25;      // ticks before the same infected cell can lose another layer
   const MAX_COLONIES = 6;
+  const MAX_HEADS = 4;
 
   let cols, rows, px, dpr, area;
   let life, born, num, edge, vigor, tint, hurt;
@@ -60,7 +61,7 @@
   let colonies, byId, nextId, infected, pressure, pressureGoal, pressureTimer;
   let arcs, stain;
   const born_ = [];   // spores that landed this tick
-  let path, tickNo, head, target = null;
+  let tickNo, heads, head, target = null;   // `head` is whichever head is acting right now
   let paused = false;
 
   const rand = (a, b) => a + Math.random() * (b - a);
@@ -108,11 +109,14 @@
     infected = 0;
     pressure = pressureGoal = 2;
     pressureTimer = 150;
-    path = [];
     tickNo = 0;
-    head = {
-      x: cols * rand(0.3, 0.7), y: rows * rand(0.3, 0.7),
-      a: rand(0, Math.PI * 2), v: STEP,
+    heads = [newHead(cols * rand(0.3, 0.7), rows * rand(0.3, 0.7), rand(0, Math.PI * 2))];
+    head = heads[0];
+  }
+
+  function newHead(x, y, a) {
+    return {
+      x, y, a, v: STEP, path: [],
       k: 0, kGoal: 0, kTimer: 0,
       r: 6, rGoal: 6, rTimer: 0, R: 6,
       lobe: rand(0, Math.PI * 2),
@@ -124,6 +128,7 @@
       anger: 0,         // rises when bites bounce off armour
       heat: 0,          // anger plus how much of the grid is infected
       memory: [],       // where it last fed
+      vitality: 1,      // a split-off head withers once things calm down
     };
   }
 
@@ -376,6 +381,7 @@
     do {
       x = Math.floor(rand(6, cols - 6));
       y = Math.floor(rand(6, rows - 6));
+      head = nearestHead(x, y);
     } while ((germ[y * cols + x] || Math.hypot(x - head.x, y - head.y) < 25) && ++tries < 30);
     if (germ[y * cols + x]) return;
     const c = buildColony(rollTraits());
@@ -386,12 +392,22 @@
     survey(c);
   }
 
+  function nearestHead(x, y) {
+    let best = heads[0], bestD = Infinity;
+    for (const h of heads) {
+      const d = Math.hypot(h.x - x, h.y - y);
+      if (d < bestD) { bestD = d; best = h; }
+    }
+    return best;
+  }
+
   function updateColonies() {
     maybeSpawn();
     for (const c of colonies) {
       if (c.count <= 0) continue;
       c.age++;
       if (c.cells.length > c.count * 1.5 + 24) c.cells = c.cells.filter(i => alive(c, i));
+      head = nearestHead(c.cx, c.cy);   // a colony reacts to whichever head is closest
       survey(c);
       if (c.energy > 0) {
         c.acc += c.growth;
@@ -408,8 +424,10 @@
     born_.length = 0;
     for (const c of colonies) {
       if (c.count > 0) continue;
-      head.memory.push({ x: c.cx, y: c.cy });
-      if (head.memory.length > 5) head.memory.shift();
+      for (const h of heads) {
+        h.memory.push({ x: c.cx, y: c.cy });
+        if (h.memory.length > 5) h.memory.shift();
+      }
       byId.delete(c.id);
     }
     colonies = colonies.filter(c => c.count > 0);
@@ -425,6 +443,7 @@
   // trail (ignoring the stretch right behind the head).
   function clearance(x, y) {
     let c = Math.min(x, y, cols - x, rows - y) - head.r;
+    const path = head.path;
     for (let i = path.length - 1 - OWN_NECK; i >= 0; i -= 2) {
       const d = Math.hypot(path[i].x - x, path[i].y - y) - head.r - 1;
       if (d < c) c = d;
@@ -557,7 +576,9 @@
   function choosePrey(known) {
     let best = null, bestScore = -Infinity;
     for (const c of known) {
-      const score = -c.near * rand(0.5, 1.5) + Math.sqrt(c.count) * rand(0, 3);
+      // heads spread out rather than all chasing the same thing
+      const taken = heads.filter(h => h !== head && h.prey === c).length;
+      const score = -c.near * rand(0.5, 1.5) + Math.sqrt(c.count) * rand(0, 3) - 15 * taken;
       if (score > bestScore) { bestScore = score; best = c; }
     }
     return best;
@@ -586,6 +607,7 @@
 
     // a colony's scent spreads the longer it's been there and the bigger it is
     for (const c of colonies) {
+      if (c.count > 0) survey(c);   // distances as this head sees them
       if (!c.noticed && c.near < 18 + c.age * 0.15 + Math.sqrt(c.count)) c.noticed = true;
     }
     const known = colonies.filter(c => c.noticed && c.count > 0);
@@ -610,7 +632,7 @@
     const p = h.plan;
     let speed = STEP, swell = 0.09;
 
-    if (target) {
+    if (target && h === heads[0]) {
       h.mode = 'idle';
       h.prey = null;
       turnToward(Math.atan2(target.y - h.y, target.x - h.x), MAX_TURN);
@@ -679,13 +701,14 @@
 
     h.v += (speed - h.v) * (h.mode === 'strike' ? 0.4 : 0.12);
     h.r += (h.rGoal - h.r) * swell;
-    h.R = h.r * (1 + 0.6 * hot);   // the more infection there is, the bigger it gets
+    // the more infection there is, the bigger it gets; a withering head shrinks away
+    h.R = h.r * (1 + 0.6 * hot) * Math.min(1, h.vitality * 3);
     h.lobe += 0.05;
 
     h.x += Math.cos(h.a) * h.v;
     h.y += Math.sin(h.a) * h.v;
-    path.push({ x: h.x, y: h.y });
-    if (path.length > TAIL) path.shift();
+    h.path.push({ x: h.x, y: h.y });
+    if (h.path.length > TAIL) h.path.shift();
   }
 
   // The head is a lumpy disc. A cell under its centre gets a full life;
@@ -734,12 +757,48 @@
     }
   }
 
+  // The immune response. Under enough pressure a head pinches in two, and
+  // the pair hunt separately. Once things calm down the extra ones wither.
+  function divide(h) {
+    const child = newHead(h.x, h.y, h.a - 1);
+    h.a += 1;
+    h.r *= 0.72;
+    child.r = h.r;
+    child.rGoal = h.rGoal;
+    h.v = child.v = STEP * 2.2;      // they spring apart
+    child.mode = 'recover';
+    child.timer = 15;
+    child.anger = h.anger;
+    child.heat = h.heat;
+    child.memory = [...h.memory];
+    return child;
+  }
+
+  function manageHeads() {
+    const split = [];
+    for (const h of heads) {
+      if (heads.length + split.length < MAX_HEADS && h.r > 4 && h.vitality > 0.5
+          && Math.random() < 0.002 * Math.max(0, h.heat - 0.65)) {
+        split.push(divide(h));
+      }
+      if (h !== heads[0]) h.vitality = clamp(h.vitality + 0.01 * (h.heat - 0.2), 0, 1);
+    }
+    heads.push(...split);
+    const first = heads[0];
+    heads = heads.filter(h => h === first || h.vitality > 0);
+  }
+
   function tick() {
     tickNo++;
     for (let i = 0; i < life.length; i++) if (life[i] > 0) life[i]--;
-    moveHead();
-    stampHead();
+    for (const h of heads) {
+      head = h;
+      moveHead();
+      stampHead();
+    }
+    manageHeads();
     updateColonies();
+    head = heads[0];
   }
 
   // ------------------------------------------------------------------ drawing
@@ -895,7 +954,8 @@
 
   // for poking at it from the browser console
   window.snake = {
-    get head() { return head; },
+    get head() { return heads[0]; },
+    get heads() { return heads; },
     get colonies() { return colonies; },
     get infected() { return infected / area; },
     tick, draw, restart,
