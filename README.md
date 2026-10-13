@@ -13,7 +13,7 @@ Open `index.html` in any web browser. There is nothing to install.
 - The Pause and Restart buttons do the same as the keys.
 - The Speed slider sets how many simulation steps run per second.
 - Record saves a video clip of the grid. Press it once to start and again to stop; the file downloads when you stop.
-- The "run" number in the bar is a link to that exact run. Opening it replays the same run, as long as the window is the same size and you don't steer.
+- The "run" number in the bar is a link to that exact run. Opening it replays the same run, as long as the window is the same size and you don't steer or drop infections.
 
 ## What you are looking at
 

@@ -1083,7 +1083,7 @@
   }
   canvas.addEventListener('pointerdown', e => { if (e.button !== 0) return; canvas.setPointerCapture(e.pointerId); pointAt(e); });
   canvas.addEventListener('pointermove', e => { if (target) pointAt(e); });
-  canvas.addEventListener('pointerup', () => { target = null; });
+  canvas.addEventListener('pointerup', e => { if (e.button === 0) target = null; });
   canvas.addEventListener('pointercancel', () => { target = null; });
   addEventListener('blur', () => { target = null; });
   // double-click drops a new infection where you clicked
@@ -1189,7 +1189,7 @@
   const recordBtn = document.getElementById('record');
   let recorder = null;
   recordBtn.onclick = () => {
-    if (recorder) { recorder.stop(); return; }
+    if (recorder) { if (recorder.state !== 'inactive') recorder.stop(); return; }
     if (!canvas.captureStream || typeof MediaRecorder === 'undefined') {
       recordBtn.textContent = 'Not supported here';
       return;
@@ -1197,7 +1197,14 @@
     const type = ['video/webm;codecs=vp9', 'video/webm', 'video/mp4'].find(t => MediaRecorder.isTypeSupported(t));
     const chunks = [];
     const started = seed;
-    recorder = new MediaRecorder(canvas.captureStream(30), { mimeType: type, videoBitsPerSecond: 8e6 });
+    try {
+      if (!type) throw new Error('no video format');
+      recorder = new MediaRecorder(canvas.captureStream(30), { mimeType: type, videoBitsPerSecond: 8e6 });
+    } catch (err) {
+      recorder = null;
+      recordBtn.textContent = 'Not supported here';
+      return;
+    }
     recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
     recorder.onstop = () => {
       const link = document.createElement('a');
