@@ -15,6 +15,7 @@
   label { display: flex; gap: 8px; align-items: center; }
   input[type=range] { width: 120px; accent-color: #2f6fe4; }
   .hint { opacity: .7; }
+  #seed { color: inherit; text-decoration: none; border-bottom: 1px dotted #555; }
   #tip { position: fixed; left: 0; top: 0; z-index: 5; display: none; width: 236px; box-sizing: border-box; padding: 9px 10px;
          background: #141417; border: 1px solid #333; border-radius: 8px; color: #c4c4ca; font-size: 11px; line-height: 1;
          box-shadow: 0 4px 14px rgba(0,0,0,.45); pointer-events: none; }
@@ -35,6 +36,7 @@
   <button id="pause">Pause</button>
   <button id="restart">Restart</button>
   <label>Speed <input id="speed" type="range" min="4" max="140" value="55"></label>
+  <a id="seed" class="hint" title="Link to this exact run"></a>
   <span class="hint">Hold the mouse down to steer · hover an infection to read its nature · space = pause · R = restart</span>
 </div>
 <script>
@@ -76,15 +78,27 @@
   let tickNo, heads, head, target = null;   // `head` is whichever head is acting right now
   let paused = false;
 
-  const rand = (a, b) => a + Math.random() * (b - a);
+  // Every run grows from one seed, so a run you like can be opened again
+  // from its link (as long as the window is the same size and you don't steer).
+  let seed, rng;
+  function random() {
+    rng = (rng + 0x6d2b79f5) | 0;
+    let t = Math.imul(rng ^ (rng >>> 15), 1 | rng);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+  let asked = typeof location === 'undefined' ? NaN : parseInt(new URLSearchParams(location.search).get('seed'), 10);
+  const seedLink = document.getElementById('seed');
+
+  const rand = (a, b) => a + random() * (b - a);
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  const skew = p => Math.pow(Math.random(), p);   // p > 1 leans toward 0
+  const skew = p => Math.pow(random(), p);   // p > 1 leans toward 0
   const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
   // 1 + seven coin flips: 1..8, clustered around 4 and 5
   function rollNumber() {
     let n = 1;
-    for (let i = 0; i < 7; i++) if (Math.random() < 0.5) n++;
+    for (let i = 0; i < 7; i++) if (random() < 0.5) n++;
     return n;
   }
 
@@ -96,6 +110,12 @@
   }
 
   function reset() {
+    // the seed in the link is used once; after that each restart is a new run
+    seed = Number.isFinite(asked) ? asked : Math.floor(Math.random() * 1e9);
+    asked = NaN;
+    rng = seed | 0;
+    seedLink.textContent = 'run ' + seed;
+    seedLink.href = '?seed=' + seed;
     const n = cols * rows;
     area = n;
     life = new Float32Array(n);    // creature: ticks left
@@ -179,7 +199,7 @@
   function rollTraits() {
     return {
       greed: skew(2.4), growth: 0.4 + 4.6 * skew(1.6), armour: skew(2.2),
-      spite: skew(2.2), nerve: skew(2.4), tips: Math.random(),
+      spite: skew(2.2), nerve: skew(2.4), tips: random(),
       lure: rand(-1, 1), drive: skew(2), spore: skew(3),
     };
   }
@@ -198,7 +218,7 @@
     const most = area * 0.55;
     if (budget === undefined) budget = 20 * Math.pow(most / 20, t.greed);
     const share = budget / most;
-    const pool = GLYPH_POOL.split('').sort(() => Math.random() - 0.5);
+    const pool = GLYPH_POOL.split('').sort(() => random() - 0.5);
     const c = {
       id: nextId++, traits: t, gen: 0, cells: [], count: 0, age: 0, acc: 0, blocked: 0,
       budget, energy: budget,            // cells it can ever grow; it can't win, it runs dry
@@ -268,9 +288,9 @@
   function pickCell(c, tips) {
     const n = c.cells.length;
     for (let t = 0; t < 4; t++) {
-      const idx = Math.random() < tips
-        ? n - 1 - Math.floor(Math.random() * Math.min(n, 6 + n * 0.1))
-        : Math.floor(Math.random() * n);
+      const idx = random() < tips
+        ? n - 1 - Math.floor(random() * Math.min(n, 6 + n * 0.1))
+        : Math.floor(random() * n);
       const i = c.cells[idx];
       if (alive(c, i)) return i;
     }
@@ -281,7 +301,7 @@
   function pickFrontier(c, tips) {
     const from = pickCell(c, tips);
     if (from < 0) return -1;
-    const d = Math.floor(Math.random() * 4);
+    const d = Math.floor(random() * 4);
     const x = from % cols + [1, -1, 0, 0][d], y = Math.floor(from / cols) + [0, 0, 1, -1][d];
     if (x < 0 || y < 0 || x >= cols || y >= rows) return -1;
     const i = y * cols + x;
@@ -298,11 +318,11 @@
       const x = i % cols + 0.5, y = Math.floor(i / cols) + 0.5;
       const toHead = Math.hypot(x - head.x, y - head.y);
       const along = Math.cos(c.heading) * (x - c.cx) + Math.sin(c.heading) * (y - c.cy);
-      const score = -c.lure * toHead / 30 + c.drive * along / 10 + Math.random();
+      const score = -c.lure * toHead / 30 + c.drive * along / 10 + random();
       if (score > bestScore) { bestScore = score; best = i; }
     }
     if (best < 0) return;
-    const hp = 1 + (Math.random() < c.armour) + (Math.random() < c.armour * c.armour);
+    const hp = 1 + (random() < c.armour) + (random() < c.armour * c.armour);
     addCell(c, best % cols, Math.floor(best / cols), hp);
     c.energy--;
   }
@@ -312,7 +332,7 @@
   function retreat(c) {
     const hunted = head.prey === c && head.mode !== 'idle';
     if (c.near > (hunted ? 34 : 12)) return;
-    if (Math.random() > c.nerve * c.stamina) return;
+    if (random() > c.nerve * c.stamina) return;
     const moves = Math.ceil(Math.sqrt(c.count) * 0.6);
     for (let m = 0; m < moves; m++) {
       let lose = -1, loseD = Infinity, gain = -1, gainD = -Infinity;
@@ -351,7 +371,7 @@
     for (let y = Math.max(0, Math.floor(h.y) - reach); y <= Math.min(rows - 1, Math.floor(h.y) + reach); y++) {
       for (let x = Math.max(0, Math.floor(h.x) - reach); x <= Math.min(cols - 1, Math.floor(h.x) + reach); x++) {
         const i = y * cols + x;
-        if (life[i] > 0 && Math.random() < 0.15 + 0.4 * s) hurt[i] = tickNo + rand(15, 30 + 40 * s);
+        if (life[i] > 0 && random() < 0.15 + 0.4 * s) hurt[i] = tickNo + rand(15, 30 + 40 * s);
       }
     }
 
@@ -388,7 +408,7 @@
     pressure += (pressureGoal - pressure) * 0.01;
     if (colonies.length >= MAX_COLONIES) return;
     const room = Math.max(0, 1 - 3 * infected / area);
-    if (Math.random() > 0.0022 * pressure * room) return;
+    if (random() > 0.0022 * pressure * room) return;
 
     let x, y, tries = 0;
     do {
@@ -400,7 +420,7 @@
     const c = buildColony(rollTraits());
     colonies.push(c);
     byId.set(c.id, c);
-    addCell(c, x, y, 1 + (Math.random() < c.armour));
+    addCell(c, x, y, 1 + (random() < c.armour));
     c.energy--;
     survey(c);
   }
@@ -428,7 +448,7 @@
       }
       if (c.count > 1) retreat(c);
       if (c.count > 12 && c.energy > 30 && colonies.length + born_.length < MAX_COLONIES
-          && Math.random() < 0.01 * c.spore) {
+          && random() < 0.01 * c.spore) {
         const child = throwSpore(c);
         if (child) born_.push(child);
       }
@@ -491,7 +511,7 @@
   function meander(scale) {
     const h = head;
     if (--h.kTimer <= 0) {
-      h.kGoal = (Math.random() < 0.2 ? rand(-MAX_TURN, MAX_TURN) : rand(-0.03, 0.03)) * scale;
+      h.kGoal = (random() < 0.2 ? rand(-MAX_TURN, MAX_TURN) : rand(-0.03, 0.03)) * scale;
       h.kTimer = rand(30, 110);
     }
     h.k += (h.kGoal - h.k) * 0.06;
@@ -507,20 +527,20 @@
     if (--h.moodTimer <= 0) {
       h.moodTimer = rand(80, 300);
       h.arousalGoal = clamp(rand(-0.2, 1.1) - 0.5 * h.fullness, 0, 1);
-      h.restlessGoal = Math.random();
+      h.restlessGoal = random();
       h.wayPull = rand(0.3, 1);
-      const pick = Math.random();
+      const pick = random();
       if (pick < 0.35) {
         h.waypoint = null;
       } else if (pick < 0.6 && h.memory.length) {
-        const m = h.memory[Math.floor(Math.random() * h.memory.length)];
+        const m = h.memory[Math.floor(random() * h.memory.length)];
         h.waypoint = { x: m.x, y: m.y };
       } else {
         // anywhere, with a lean toward the edges
-        const hug = Math.random() < 0.4;
+        const hug = random() < 0.4;
         h.waypoint = {
-          x: hug && Math.random() < 0.5 ? (Math.random() < 0.5 ? 9 : cols - 9) : rand(9, cols - 9),
-          y: hug ? (Math.random() < 0.5 ? 9 : rows - 9) : rand(9, rows - 9),
+          x: hug && random() < 0.5 ? (random() < 0.5 ? 9 : cols - 9) : rand(9, cols - 9),
+          y: hug ? (random() < 0.5 ? 9 : rows - 9) : rand(9, rows - 9),
         };
       }
     }
@@ -543,7 +563,7 @@
     }
 
     // a sudden start
-    if (Math.random() < 0.004 * (0.3 + h.restless)) {
+    if (random() < 0.004 * (0.3 + h.restless)) {
       h.a += rand(-1.2, 1.2);
       h.r *= rand(0.7, 1.3);
       h.v = STEP * rand(1, 2);
@@ -577,7 +597,7 @@
     };
     return {
       orbit: roll.orbit,
-      side: Math.random() < 0.5 ? 1 : -1,
+      side: random() < 0.5 ? 1 : -1,
       weave: roll.weave, weaveRate: rand(0.03, 0.1), phase: rand(0, 6.3),
       pace: roll.pace * (1 + hot),
       strikeDist: roll.strikeDist,
@@ -767,7 +787,7 @@
       h.fullness = Math.min(1, h.fullness + 0.004 * ate);
     }
     for (const c of colonies) {
-      if (c.blocked >= 3 && c.count > 0 && c.fury >= 1 && h.mode !== 'recoil' && Math.random() < 0.35 + 0.65 * c.spite) {
+      if (c.blocked >= 3 && c.count > 0 && c.fury >= 1 && h.mode !== 'recoil' && random() < 0.35 + 0.65 * c.spite) {
         retaliate(c);
       }
       h.anger = Math.min(1, h.anger + 0.002 * c.blocked);
@@ -796,7 +816,7 @@
     const split = [];
     for (const h of heads) {
       if (heads.length + split.length < MAX_HEADS && h.r > 4 && h.vitality > 0.5
-          && Math.random() < 0.002 * Math.max(0, h.heat - 0.65)) {
+          && random() < 0.002 * Math.max(0, h.heat - 0.65)) {
         split.push(divide(h));
       }
       if (h !== heads[0]) h.vitality = clamp(h.vitality + 0.01 * (h.heat - 0.2), 0, 1);
