@@ -23,6 +23,8 @@ This is a normal Mac app. It opens the simulation in its own window.
 
 **2. Number Snake.saver** (in the zip called `Number-Snake-screensaver.zip`)
 
+Each time the screensaver starts it shows one of the two defenders, the hunter or the warden, chosen at random.
+
 This is a screen saver. It shows the same simulation, with no controls.
 
 ## Install the app

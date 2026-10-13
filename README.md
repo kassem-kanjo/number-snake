@@ -21,7 +21,9 @@
 
 **The hunter** is the blue one. It wanders, dozes, patrols, and when it catches the scent of an infection it stops, stalks, coils and lunges. Under enough pressure it splits in two.
 
-**The warden** is the teal ring. It drifts as a thin, calm circle with no trail. When it finds an infection it opens into a cup, slides round it, closes into a full circle, holds for a beat, and claps shut. Nothing inside survives, armour or not.
+The two share the work out: each claims its own infection, and the other leaves it alone.
+
+**The warden** is the teal ring. It drifts as a calm circle with no trail, colours and numbers flowing round it. When it finds an infection it opens into a cup, slides round it, closes into a full circle, holds for a beat, and claps shut. Nothing inside survives, armour or not.
 
 **Infections** are the red-and-black glitches. Every one is born different, and none of them can win, though some put up a fight.
 

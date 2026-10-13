@@ -4,6 +4,13 @@ Notable changes to Number Snake. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-10-13
+
+### Changed
+- The screensaver shows one defender at a time, the hunter or the warden, chosen at random each time it starts.
+- Defenders share targets out: an infection one has claimed is left alone by the others, so each goes after its own. Only a very large infection (250 cells or more) has room for a second attacker.
+- The warden's ring is alive to watch: a loop of colours flows round it, the numbers on it run round with the colours, and its band swells and thins in travelling waves. The flow quickens as it closes in.
+
 ## [0.3.1] - 2026-10-13
 
 ### Changed
