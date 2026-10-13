@@ -12,7 +12,7 @@ Play it in your browser at **https://kassem-kanjo.github.io/number-snake/**, or 
 - The controls rest as a small dot at the bottom of the window. Move the mouse onto it and it opens into a panel; move away and it closes. On a touch screen, tap it.
 - Space pauses and resumes. R restarts with a new grid. F enters and leaves fullscreen, where only the grid shows and even the dot hides while the mouse is still.
 - The Pause, Restart and Fullscreen buttons do the same as the keys.
-- The Speed slider sets how many simulation steps run per second.
+- The Speed slider sets how fast the simulation runs. The calm pace runs at 60% of the Outbreak pace for the same setting.
 - It starts at a calm pace meant for leaving it running: outbreaks are rare, small and slow, at most two at a time. The Outbreak button switches to more, bigger and faster infections, several at once, and back.
 - Adding `?saver=1` to the address shows the grid and nothing else and ignores input. The Mac screensaver uses this.
 - Record saves a video clip of the grid. Press it once to start and again to stop; the file downloads when you stop.
@@ -33,7 +33,7 @@ Play it in your browser at **https://kassem-kanjo.github.io/number-snake/**, or 
 - **Red and black cells** are infected cells. Armoured cells, which take several bites, go almost solid black.
 - **Glyphs** are small symbols drawn in an infection's cells. Each infection has its own set. Spiteful infections spark white or pink.
 - **Flicker**: an infection's look changes every few ticks. Jumpy infections flicker faster, and ones that hide flicker slowly and stay dark.
-- **Magenta cells** in an infection mean it is poisonous. Eating them slows and shrinks the creature for a while.
+- **Magenta cells** in an infection mean it is poisonous: the more magenta, the more likely each mouthful is to poison. Poison slows and shrinks the creature for a while.
 - **Torn scanlines** are short red or black bars sticking out of an infection's sides. Bigger infections have more of them.
 
 ## How it works
@@ -56,7 +56,7 @@ Each infection rolls its own values for these traits. They are independent, so a
 | hush | 0 to 1 | How well it hides its scent, so the creature notices it later |
 | venom | 0 to 1 | How sick it makes whatever eats it |
 
-A spore child copies its parent's traits with small random nudges.
+A spore child copies its parent's traits with small random nudges. At the calm pace greed and growth are scaled down after rolling (to 55% and 50%), so growth can sit below the range shown.
 
 ### Attack plans
 
@@ -86,7 +86,7 @@ When heat gets high enough, the creature can pinch into several heads, up to a f
 
 ## Testing
 
-Run `node bench.js [ticks] [cols] [rows] [outbreak]` from the project folder. It tests the calm default; add the word `outbreak` to test outbreak mode. `node bench.js --check` is the quick pass/fail version that runs on every pull request. It needs only Node, not a browser. The defaults are 200000 ticks on a 90 by 60 grid. It runs the simulation headless and prints JSON:
+Run `node bench.js [ticks] [cols] [rows] [outbreak]` from the project folder. It tests the calm default; to test Outbreak mode pass `outbreak` as the fourth argument, after ticks, columns and rows (for example `node bench.js 200000 90 60 outbreak`). The page picks its own cell size, so the grid can come out smaller than asked for large sizes. `node bench.js --check` is the quick pass/fail version that runs on every pull request. It needs only Node, not a browser. The defaults are 200000 ticks (80000 with `--check`) on a 90 by 60 grid. It runs the simulation headless and prints JSON:
 
 - `ticks`: the number of steps run.
 - `outbreaksCleared`: infections that were fully eaten or died out during the run.
@@ -98,7 +98,7 @@ Run `node bench.js [ticks] [cols] [rows] [outbreak]` from the project folder. It
 - `maxInfectedPct`: the highest share of the grid that was infected, in percent.
 - `maxGeneration`: the deepest spore generation seen (0 is an original infection).
 - `splitPct`: percent of ticks with more than one head.
-- `growthBlockedByTrail`: how many times the creature's fresh trail stopped an infection growing or backing away.
+- `growthBlockedByTrail`: how many attempts by an infection to grow or back away into the creature's fresh trail were turned away.
 - `maxHeads`: the most heads alive at one time.
 
 Each benchmark run uses a new random seed, so numbers change from run to run. Compare runs with a large tick count, and expect some variation.

@@ -11,7 +11,7 @@
   canvas { background: #fff; border-radius: 14px; touch-action: none; cursor: crosshair; }
   /* The controls rest as a pinhole at the bottom and open into a panel when
      you reach for them. The dock is a generous invisible target around it. */
-  #dock { position: fixed; left: 50%; bottom: 0; z-index: 4; transform: translateX(-50%); padding: 22px 70px 11px; transition: opacity .6s; }
+  #dock { position: fixed; left: 50%; bottom: 0; z-index: 4; transform: translateX(-50%); padding: 11px 30px; transition: opacity .6s; }
   #bar { position: relative; box-sizing: border-box; margin: 0 auto; overflow: hidden;
          width: 12px; height: 12px; border-radius: 999px; background: #7d7d86; border: 1px solid transparent; opacity: .55;
          animation: breathe 4.5s ease-in-out infinite;
@@ -216,8 +216,10 @@
     };
   }
 
+  const isFull = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+
   function layout() {
-    const full = saver || !!document.fullscreenElement;
+    const full = saver || isFull();
     const w = stage.clientWidth - (full ? 0 : 32), h = stage.clientHeight - (full ? 0 : 50);
     const px2 = Math.max(9, Math.min(13, Math.round(Math.min(w, h) / 78)));
     const cols2 = Math.max(12, Math.floor(w / px2)), rows2 = Math.max(12, Math.floor(h / px2));
@@ -1107,7 +1109,8 @@
     }
     drawColonyGlyphs();
 
-    tally.textContent = `cleared ${cleared} · alive ${colonies.length}` + (heads.length > 1 ? ` · split in ${heads.length}` : '');
+    const count = `cleared ${cleared} · alive ${colonies.length}` + (heads.length > 1 ? ` · split in ${heads.length}` : '');
+    if (count !== tally.textContent) { tally.textContent = count; sizePanel(); }   // the panel opens to fit its text
   }
 
   // ----------------------------------------------------------------- controls
@@ -1318,11 +1321,17 @@
     e.preventDefault();
   });
   canvas.addEventListener('pointerdown', () => dock.classList.remove('open'));
+  // a clicked button keeps focus, which would hold the panel open after the mouse has gone
+  dock.addEventListener('mouseleave', () => { if (dock.contains(document.activeElement)) document.activeElement.blur(); });
 
   // Fullscreen shows nothing but the grid; the pinhole comes back when the mouse moves.
   function toggleFull() {
-    if (document.fullscreenElement) document.exitFullscreen();
-    else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+    const el = document.documentElement;
+    if (isFull()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    else {
+      const asked = (el.requestFullscreen || el.webkitRequestFullscreen || (() => {})).call(el);
+      if (asked && asked.catch) asked.catch(() => {});   // refused: stay as we are
+    }
   }
   document.getElementById('full').onclick = toggleFull;
   let quietTimer;
@@ -1330,14 +1339,13 @@
     if (!document.body) return;
     document.body.classList.remove('quiet');
     clearTimeout(quietTimer);
-    if (document.fullscreenElement) quietTimer = setTimeout(() => document.body.classList.add('quiet'), 2500);
+    if (isFull()) quietTimer = setTimeout(() => document.body.classList.add('quiet'), 2500);
   }
   addEventListener('mousemove', stir);
-  addEventListener('fullscreenchange', () => {
-    document.body.classList.toggle('fs', !!document.fullscreenElement);
-    stir();
-    layout();
-  }, true);
+  // the window resizes as it goes in and out, and the resize handler lays the grid out again
+  for (const name of ['fullscreenchange', 'webkitfullscreenchange']) {
+    addEventListener(name, () => { document.body.classList.toggle('fs', isFull()); stir(); }, true);
+  }
 
   let resizeTimer;
   addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { sizePanel(); layout(); }, 150); });
@@ -1347,6 +1355,7 @@
     get head() { return heads[0]; },
     get heads() { return heads; },
     get cleared() { return cleared; },
+    get area() { return area; },
     get walled() { return walled; },
     get colonies() { return colonies; },
     get infected() { return infected / area; },
