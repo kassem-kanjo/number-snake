@@ -1,5 +1,5 @@
 // Runs the simulation in index.html without a browser and prints what happened.
-//   node bench.js [ticks] [cols] [rows]
+//   node bench.js [ticks] [cols] [rows] [ambient]
 // Use it to check a change: every outbreak should still get eaten, and the
 // numbers should not drift far from the last run unless you meant them to.
 const fs = require('fs');
@@ -8,6 +8,7 @@ const path = require('path');
 const ticks = +process.argv[2] || 200000;
 const gridCols = +process.argv[3] || 90;
 const gridRows = +process.argv[4] || 60;
+const ambient = process.argv[5] === 'ambient';
 
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 const script = html.slice(html.indexOf('<script>') + 8, html.lastIndexOf('</script>'));
@@ -18,6 +19,7 @@ const ctx = new Proxy({}, { get: () => noop, set: () => true });
 const el = () => ({
   getContext: () => ctx, style: {}, addEventListener: noop, setPointerCapture: noop,
   getBoundingClientRect: () => ({ left: 0, top: 0 }), value: 55, textContent: '',
+  classList: { add: noop, remove: noop, toggle: noop },
   clientWidth: gridCols * 9 + 32, clientHeight: gridRows * 9 + 24,
 });
 global.window = global;
@@ -29,6 +31,7 @@ global.performance = { now: () => 0 };
 
 new Function(script)();
 const s = global.snake;
+if (ambient) s.setAmbient(true);
 
 const seen = new Map(), lives = [], modes = {};
 let maxInfected = 0, several = 0, maxGen = 0, maxHeads = 0, split = 0;

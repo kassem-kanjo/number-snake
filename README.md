@@ -12,6 +12,7 @@ Open `index.html` in any web browser. There is nothing to install.
 - Space pauses and resumes. R restarts with a new grid.
 - The Pause and Restart buttons do the same as the keys.
 - The Speed slider sets how many simulation steps run per second.
+- Ambient switches to a calmer pace for leaving it running: outbreaks are rarer, smaller and slower, at most two at a time, and the controls fade back until you move the mouse over them.
 - Record saves a video clip of the grid. Press it once to start and again to stop; the file downloads when you stop.
 - The "run" number in the bar is a link to that exact run. Opening it replays the same run, as long as the window is the same size and you don't steer or drop infections.
 
@@ -83,7 +84,7 @@ When heat gets high enough, the creature can pinch into several heads, up to a f
 
 ## Testing
 
-Run `node bench.js [ticks] [cols] [rows]` from the project folder. It needs only Node, not a browser. The defaults are 200000 ticks on a 90 by 60 grid. It runs the simulation headless and prints JSON:
+Run `node bench.js [ticks] [cols] [rows] [ambient]` from the project folder (add the word `ambient` to test ambient mode). It needs only Node, not a browser. The defaults are 200000 ticks on a 90 by 60 grid. It runs the simulation headless and prints JSON:
 
 - `ticks`: the number of steps run.
 - `outbreaksCleared`: infections that were fully eaten or died out during the run.
