@@ -57,6 +57,7 @@
   const INK  = ['#06163f', '#06404a', '#221463', '#0d4a35', '#b9c6ff'];
   const BANDS = [0.72, 0.52, 0.34, 0.17];   // life fractions where the colour changes
 
+  const NUCLEUS = '#35208c';
   const STAIN = ['#6a5bd0', '#8e3f9e', '#b3245f'];   // a swallowed cell dissolving, last to first
   const BLACK = '#0a0a0a', RED = '#e3122b', BLOOD = '#7a0613', PINK = '#ff5a6e', SOUR = '#c214a8';
   const GLYPH_POOL = '0123456789#X%/\\<>=+*?!:;[]{}^~';
@@ -74,7 +75,7 @@
   let life, born, num, edge, vigor, tint, hurt;
   let germ, germHit, owner;
   let colonies, byId, nextId, infected, pressure, pressureGoal, pressureTimer;
-  let arcs, stain, motes, scar, cleared;
+  let arcs, stain, motes, scar, cleared, core;
   const born_ = [];   // spores that landed this tick
   let tickNo, heads, head, target = null;   // `head` is whichever head is acting right now
   let paused = false;
@@ -139,7 +140,8 @@
     arcs = [];
     scar = new Int32Array(n);      // where infection was eaten stays faintly marked for a while
     motes = [];
-    cleared = 0;                    // flecks thrown off when a colony dies
+    cleared = 0;
+    core = new Uint8Array(n);      // cells showing a nucleus this frame                    // flecks thrown off when a colony dies
     stain = new Int32Array(n);     // creature cells that just swallowed something
     byId = new Map();
     nextId = 1;
@@ -165,7 +167,7 @@
       anger: 0,         // rises when bites bounce off armour
       heat: 0,          // anger plus how much of the grid is infected
       memory: [],       // where it last fed
-      stretch: 1,
+      stretch: 1, gaze: a,
       sick: 0,          // poison in its system: slows and shrinks it until it wears off
       vitality: 1,      // a split-off head withers once things calm down
     };
@@ -693,6 +695,9 @@
       bearing = Math.atan2(ay - h.y, ax - h.x);
     }
 
+    // its nucleus leans toward whatever has its attention
+    h.gaze += angleDiff(h.prey ? bearing : h.a, h.gaze) * 0.15;
+
     const p = h.plan;
     let speed = STEP, swell = 0.09;
 
@@ -948,6 +953,22 @@
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, cols * px, rows * px);
 
+    // Each head carries a dark nucleus, pushed toward what it is watching:
+    // you can see it notice something before it moves. It tightens when
+    // the head coils to strike.
+    core.fill(0);
+    for (const h of heads) {
+      const tight = h.mode === 'windup' ? 0.2 : h.mode === 'alert' ? 0.36 : 0.28;
+      const nr = Math.max(1.1, h.R * tight);
+      const nx = h.x + Math.cos(h.gaze) * h.R * 0.38, ny = h.y + Math.sin(h.gaze) * h.R * 0.38;
+      for (let y = Math.max(0, Math.floor(ny - nr - 1)); y <= Math.min(rows - 1, Math.floor(ny + nr + 1)); y++) {
+        for (let x = Math.max(0, Math.floor(nx - nr - 1)); x <= Math.min(cols - 1, Math.floor(nx + nr + 1)); x++) {
+          const i = y * cols + x;
+          if (Math.hypot(x + 0.5 - nx, y + 0.5 - ny) < nr + 0.4 * edge[i]) core[i] = 1;
+        }
+      }
+    }
+
     const slot = tickNo >> 2;
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
@@ -961,6 +982,7 @@
         if (life[i] <= 0 || germ[i]) continue;
         ctx.fillStyle = hurt[i] > tickNo ? (hash(i, slot) % 5 < 3 ? BLACK : RED)
           : stain[i] > tickNo ? STAIN[Math.min(2, (stain[i] - tickNo) >> 3)]
+          : core[i] ? NUCLEUS
           : FILL[band(i)];
         ctx.fillRect(x * px, y * px, px, px);
       }
@@ -1003,7 +1025,7 @@
       for (let x = 0; x < cols; x++) {
         const i = y * cols + x;
         if (life[i] <= 0 || germ[i]) continue;
-        ctx.fillStyle = hurt[i] > tickNo ? (hash(i, slot) % 5 < 3 ? RED : BLACK) : INK[band(i)];
+        ctx.fillStyle = hurt[i] > tickNo ? (hash(i, slot) % 5 < 3 ? RED : BLACK) : core[i] && stain[i] <= tickNo ? '#d9d0ff' : INK[band(i)];
         ctx.fillText(num[i], x * px + px / 2 + 0.5, y * px + px / 2 + 1);
       }
     }
