@@ -4,6 +4,13 @@ What was decided, why, and what was tried and thrown away. Newest first. Benchma
 
 ## 2026-10-13
 
+### The clap was not satisfying
+The owner's reaction to the ring: "the actions of squishing is not satisfying." The ring closed at a constant 0.9 cells a tick, armoured cells were still standing inside it afterwards, and the moment it shut looked like any other tick.
+
+Changed: the ring now draws back 16% in the last instant of its hold, starts closing slowly and accelerates (each tick about 45% faster, capped at its own thickness so no cell is skipped), and flattens everything it meets regardless of armour. On impact it throws debris in the infection's colours (more for a bigger kill), sends a pale ripple outward, shakes the grid for seven ticks and freezes the simulation for two to four. A clap that catches nothing gets only a small burst.
+
+Outbreak mode, 200,000 ticks, two runs: 568 / 576 cleared, median life 370 / 354 ticks (was 419 to 456), slowest tenth 838 / 870 (was 1074 to 1177), hunter idle 40%, warden's share of cells eaten 28 / 29% (was 21%). Warden alone in Outbreak mode: median 605, longest 5,665 ticks (was 1423 and 13,000). Calm mode: 177 cleared, idle 80%. The healthy ranges in CONTRIBUTING.md moved to match. Judged from frozen frames and timings only; the motion itself still needs the owner's eye.
+
 ### The warden is a ring that claps
 The owner rejected the first warden: "too similar to the hunter... two same ones make it so messy." It had passed every measurement set for it (it travelled a median 1.4 turns round its prey before striking) and still read as a second blob with a second trail. What was wanted was "like clapping a fly, but a circle".
 
