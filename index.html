@@ -297,15 +297,94 @@
     const w = stage.clientWidth - (full ? 0 : 32), h = stage.clientHeight - (full ? 0 : 50);
     const px2 = Math.max(9, Math.min(13, Math.round(Math.min(w, h) / 78)));
     const cols2 = Math.max(12, Math.floor(w / px2)), rows2 = Math.max(12, Math.floor(h / px2));
-    if (heads && px2 === px && cols2 === cols && rows2 === rows) return;   // same grid: keep the run
+    if (heads && px2 === px && cols2 === cols && rows2 === rows) return;   // same grid: nothing to do
+    const oldCols = cols, oldRows = rows;
     px = px2; cols = cols2; rows = rows2;
     dpr = window.devicePixelRatio || 1;
     canvas.style.width = cols * px + 'px';
     canvas.style.height = rows * px + 'px';
     canvas.width = cols * px * dpr;
     canvas.height = rows * px * dpr;
-    reset();
+    if (heads) regrid(oldCols, oldRows);   // a resize keeps the run going
+    else reset();
     draw();
+  }
+
+  // The window changed size mid-run. Everything keeps its place relative to
+  // the centre: a bigger grid just gains empty space round the edges, and on
+  // a smaller one whatever would hang off an edge is pushed back inside.
+  function regrid(oldCols, oldRows) {
+    const dx = Math.floor((cols - oldCols) / 2), dy = Math.floor((rows - oldRows) / 2);
+    const was = { life, born, who, hurt, stain, scar, germ, germHit, owner };
+    const n = cols * rows;
+    area = n;
+    life = new Float32Array(n); born = new Float32Array(n); who = new Uint8Array(n);
+    hurt = new Int32Array(n); stain = new Int32Array(n); scar = new Int32Array(n);
+    germ = new Uint8Array(n); germHit = new Int32Array(n).fill(-1e9); owner = new Int32Array(n);
+    core = new Uint8Array(n);
+    edge = new Float32Array(n); vigor = new Float32Array(n); tint = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      edge[i] = rand(-0.9, 0.9);
+      vigor[i] = rand(0.55, 1.45);
+      tint[i] = rand(-0.13, 0.13);
+    }
+
+    // creature cells and marks move with the grid; any that fall outside are let go
+    for (let y = 0; y < oldRows; y++) {
+      const ny = y + dy;
+      if (ny < 0 || ny >= rows) continue;
+      for (let x = 0; x < oldCols; x++) {
+        const nx = x + dx;
+        if (nx < 0 || nx >= cols) continue;
+        const i = y * oldCols + x, j = ny * cols + nx;
+        life[j] = was.life[i]; born[j] = was.born[i]; who[j] = was.who[i];
+        hurt[j] = was.hurt[i]; stain[j] = was.stain[i]; scar[j] = was.scar[i];
+      }
+    }
+
+    // each colony slides as a whole until it fits; only what still can't fit is lost
+    infected = 0;
+    for (const c of colonies) {
+      const cells = c.cells.filter(i => was.germ[i] > 0 && was.owner[i] === c.id);
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const i of cells) {
+        const x = i % oldCols + dx, y = Math.floor(i / oldCols) + dy;
+        if (x < x0) x0 = x; if (x > x1) x1 = x;
+        if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+      const sx = x0 < 0 ? -x0 : x1 >= cols ? cols - 1 - x1 : 0;
+      const sy = y0 < 0 ? -y0 : y1 >= rows ? rows - 1 - y1 : 0;
+      const kept = [];
+      for (const i of cells) {
+        const x = i % oldCols + dx + sx, y = Math.floor(i / oldCols) + dy + sy;
+        if (x < 0 || y < 0 || x >= cols || y >= rows) continue;
+        const j = y * cols + x;
+        if (germ[j]) continue;   // another colony was pushed here first
+        germ[j] = was.germ[i]; germHit[j] = was.germHit[i]; owner[j] = c.id;
+        kept.push(j);
+      }
+      c.cells = kept;
+      c.held = new Set(kept);
+      c.count = kept.length;
+      c.cx += dx + sx; c.cy += dy + sy;
+      infected += kept.length;
+    }
+
+    const pushIn = p => { p.x = clamp(p.x + dx, 3, cols - 3); p.y = clamp(p.y + dy, 3, rows - 3); };
+    for (const h of heads) {
+      pushIn(h);
+      h.path.forEach(pushIn);
+      if (h.waypoint) pushIn(h.waypoint);
+      h.memory.forEach(pushIn);
+    }
+    for (const m of motes) { m.x += dx; m.y += dy; }
+    for (const a of arcs) { a.x0 += dx; a.x1 += dx; a.y0 += dy; a.y1 += dy; }
+    for (const c of colonies) {
+      if (c.count <= 0) continue;
+      head = nearestHead(c.cx, c.cy);
+      survey(c);
+    }
+    head = heads[0];
   }
 
   // ---------------------------------------------------------------- infection
@@ -1499,7 +1578,7 @@
     setPresent,
     get colonies() { return colonies; },
     get infected() { return infected / area; },
-    tick, draw, restart, setAmbient,
+    tick, draw, restart, layout, setAmbient,
   };
 
   layout();

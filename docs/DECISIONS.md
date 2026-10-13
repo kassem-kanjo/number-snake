@@ -4,6 +4,9 @@ What was decided, why, and what was tried and thrown away. Newest first. Benchma
 
 ## 2026-10-13
 
+### A resize keeps the run
+Any change in window size used to start a new run. Now `regrid` rebuilds the per-cell arrays at the new size and carries everything across, anchored to the centre. Growing only adds empty space. On shrinking, each colony slides as a whole until it fits and loses only cells that still cannot fit or that land on another colony; heads, their paths and their remembered places are clamped inside; trail cells outside the new grid are dropped, since heads re-lay them at once. Checked by shrinking and growing a busy run four times (90x60 to 60x40 to 126x81 to 30x20 to 90x60) with the bookkeeping audit after each: no failures, and the one drastic shrink lost 12 of 203 infected cells. A resized run no longer matches its seed link, which was already true of any run in a different-sized window.
+
 ### A button for each defender; a lone defender loses its calm
 Each species has a button that removes it from the grid or returns it. One must always stay, or infections could win, so asking the last one to leave brings the others back.
 

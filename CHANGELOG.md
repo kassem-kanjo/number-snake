@@ -8,6 +8,7 @@ Notable changes to Number Snake. The format follows [Keep a Changelog](https://k
 - `skip=N` in the address starts a run N ticks in, so a link can open mid-action.
 
 ### Changed
+- Resizing the window, or entering and leaving fullscreen, no longer restarts the run. A bigger window adds empty grid round what is there; a smaller one pushes the defenders and infections back inside.
 - The README is shorter, leads with an image and links to play or download, and explains each trait alongside how to spot it. The benchmark's field list moved to CONTRIBUTING.md.
 
 ## [0.2.0] - 2026-10-13

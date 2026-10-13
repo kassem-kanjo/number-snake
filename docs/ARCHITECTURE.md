@@ -42,6 +42,10 @@ The grid is `cols` by `rows`. Every per-cell value is a typed array indexed by `
 - `root` is true for the two permanent heads: the hunter, which is always `heads[0]`, is steered by the mouse and is counted in the tally; and the warden. Withering (`vitality`) applies only to heads that are not root. A head made by `divide` inherits its parent's species.
 - The global `head` points at whichever head is acting. `tick` sets it before `moveHead` and `stampHead`; `updateColonies` sets it to the head nearest each colony. Anything that reads `head` relies on that.
 
+## Resizing
+
+`layout` picks the cell size and grid from the window. The first time it calls `reset`; after that it calls `regrid`, which moves every per-cell array, colony, head and mark onto the new grid without restarting. Any new per-cell array must be carried across in `regrid` as well as created in `reset`.
+
 ## One tick
 
 1. Every creature cell loses one tick of life.
