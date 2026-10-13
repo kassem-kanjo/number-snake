@@ -1,5 +1,5 @@
 // Runs the simulation in index.html without a browser and prints what happened.
-//   node bench.js [ticks] [cols] [rows] [ambient]
+//   node bench.js [ticks] [cols] [rows] [busy]     the default is the calm mode
 //   node bench.js --check        quick pass/fail, used by CI
 // Use it to check a change: every outbreak should still get eaten, and the
 // numbers should not drift far from the last run unless you meant them to.
@@ -11,7 +11,7 @@ const args = process.argv.slice(2).filter(a => a !== '--check');
 const ticks = +args[0] || (check ? 80000 : 200000);
 const gridCols = +args[1] || 90;
 const gridRows = +args[2] || 60;
-const ambient = args[3] === 'ambient';
+const busy = args[3] === 'busy';
 
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 const script = html.slice(html.indexOf('<script>') + 8, html.lastIndexOf('</script>'));
@@ -20,10 +20,11 @@ const script = html.slice(html.indexOf('<script>') + 8, html.lastIndexOf('</scri
 const noop = () => {};
 const ctx = new Proxy({}, { get: () => noop, set: () => true });
 const el = () => ({
-  getContext: () => ctx, style: {}, addEventListener: noop, setPointerCapture: noop,
+  getContext: () => ctx, style: { setProperty: noop }, addEventListener: noop, setPointerCapture: noop,
   getBoundingClientRect: () => ({ left: 0, top: 0 }), value: 55, textContent: '',
   classList: { add: noop, remove: noop, toggle: noop },
-  clientWidth: gridCols * 9 + 32, clientHeight: gridRows * 9 + 24,
+  clientWidth: gridCols * 9 + 32, clientHeight: gridRows * 9 + 50, offsetWidth: 600, offsetHeight: 60,
+  setProperty: noop,
 });
 global.window = global;
 global.document = { getElementById: el };
@@ -34,7 +35,7 @@ global.performance = { now: () => 0 };
 
 new Function(script)();
 const s = global.snake;
-if (ambient) s.setAmbient(true);
+s.setAmbient(!busy);
 
 // things that must be true at any moment
 const failures = [];
