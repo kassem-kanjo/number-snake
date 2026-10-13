@@ -4,6 +4,17 @@ What was decided, why, and what was tried and thrown away. Newest first. Benchma
 
 ## 2026-10-13
 
+### The warden is a ring that claps
+The owner rejected the first warden: "too similar to the hunter... two same ones make it so messy." It had passed every measurement set for it (it travelled a median 1.4 turns round its prey before striking) and still read as a second blob with a second trail. What was wanted was "like clapping a fly, but a circle".
+
+The warden is now a thin ring whose cells live about five ticks, so it leaves no trail. It rests as a closed circle, opens into a cup facing its prey, slides until the prey is inside, closes the gap, holds, then its radius falls to zero at 0.9 cells a tick, eating what it passes. A colony too big to encircle (the ring tops out at 12 cells, 17 when worked up) gets a ring-sized bite. It is expressed as numbers on the species record (`hollow`, `glow`, `cup`, `crush`, `cap`), not as a named kind. The first warden's edge-following approach, its `standoff` and `circle` plan dimensions and its long trail were deleted.
+
+Outbreak mode, 200,000 ticks: 530 to 553 outbreaks cleared, none left alive, median life 419 to 456 ticks, slowest tenth 1074 to 1177, hunter idle 35 to 38%. The warden eats 21 to 22% of infected cells, up from 12% for the first version. Calm mode: 188 cleared, warden's share 27%. Warden alone in Outbreak mode: all cleared, median 1423, longest 13,000 ticks. Hunter alone is unchanged.
+
+Tuned by eye after the build: the ring is one solid colour with a lighter tone as it fades (five colour bands flickered on such short-lived cells); it rests wider and thinner (radius 5 to 7.5, thickness 1.8) because a small thick ring looked like a doughnut; every clap runs to completion and ends in a small burst.
+
+Process note: the build was first handed to a Sonnet worker from a written spec. It delivered the mechanics; the look had to be finished by eye. Behaviour and appearance work now stays with whoever can see the screen.
+
 ### A resize keeps the run
 Any change in window size used to start a new run. Now `regrid` rebuilds the per-cell arrays at the new size and carries everything across, anchored to the centre. Growing only adds empty space. On shrinking, each colony slides as a whole until it fits and loses only cells that still cannot fit or that land on another colony; heads, their paths and their remembered places are clamped inside; trail cells outside the new grid are dropped, since heads re-lay them at once. Checked by shrinking and growing a busy run four times (90x60 to 60x40 to 126x81 to 30x20 to 90x60) with the bookkeeping audit after each: no failures, and the one drastic shrink lost 12 of 203 infected cells. A resized run no longer matches its seed link, which was already true of any run in a different-sized window.
 

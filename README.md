@@ -21,7 +21,7 @@
 
 **The hunter** is the blue one. It wanders, dozes, patrols, and when it catches the scent of an infection it stops, stalks, coils and lunges. Under enough pressure it splits in two.
 
-**The warden** is the teal one, calm and deliberate. It circles an infection to pen it in, then crushes it.
+**The warden** is the teal ring. It drifts as a thin, calm circle with no trail. When it finds an infection it opens into a cup, slides round it, closes into a full circle, holds for a beat, and claps shut. Armoured infections take more than one clap.
 
 **Infections** are the red-and-black glitches. Every one is born different, and none of them can win, though some put up a fight.
 
@@ -43,7 +43,7 @@ There are no enemy types and no attack animations. Every infection rolls its own
 | **hush** | Hides its scent, so it is noticed late | Dark and slow to flicker |
 | **venom** | Poisons whatever eats it, slowing it down | Magenta cells |
 
-The defenders work the same way. Each attack is a plan rolled fresh: how much to circle, how close to creep, how long to coil, how hard to strike, how wide to open. A lunge from ambush, a string of quick bites and a slow engulfing are all the same code with different numbers. Between hunts their mood drifts, so they rest, roam, and go back to nose around where they last fed.
+The hunter works the same way. Each attack is a plan rolled fresh: how much to circle, how close to creep, how long to coil, how hard to strike, how wide to open. A lunge from ambush, a string of quick bites and a slow engulfing are all the same code with different numbers. Between hunts their mood drifts, so they rest, roam, and go back to nose around where they last fed.
 
 Hover anything on the grid to read it: an infection's traits, or what a defender is doing and how it feels.
 
