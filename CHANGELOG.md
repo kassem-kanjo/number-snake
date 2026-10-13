@@ -4,10 +4,6 @@ Notable changes to Number Snake. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
-### Added
-- Project documentation: this changelog, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md` and `CONTRIBUTING.md`.
-- `node bench.js --check`, and a GitHub Actions workflow that runs it on every pull request.
-
 ## [0.1.0] - 2026-10-13
 
 First tagged version.
@@ -26,7 +22,8 @@ First tagged version.
 - Seeded runs with a link that replays the same run.
 - Record button that saves a video clip.
 - Ambient mode for leaving it running.
-- `bench.js`, a headless benchmark.
+- `bench.js`, a headless benchmark, with a `--check` mode that runs on every pull request.
+- Project documentation: this changelog, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md` and `CONTRIBUTING.md`.
 
 ### Fixed
 - Duplicate entries in a colony's cell list skewing its centre and the creature's aim.
