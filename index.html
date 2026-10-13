@@ -79,7 +79,7 @@
   let germ, germHit, owner;
   let colonies, byId, nextId, infected, pressure, pressureGoal, pressureTimer;
   let arcs, stain, motes, scar, cleared, core;
-  const born_ = [];   // spores that landed this tick
+  const landed = [];   // spore children that landed this tick
   let tickNo, heads, head, target = null;   // `head` is whichever head is acting right now
   let paused = false;
 
@@ -247,7 +247,7 @@
     c.look = {
       slot: Math.max(1, Math.round(10 - 8 * t.nerve + 8 * t.hush + rand(-1, 1))),   // jumpy ones flicker fast, quiet ones slowly
       red: clamp((0.3 + 0.5 * share + 0.3 * (c.growth / 8) + rand(-0.12, 0.12)) * (1 - 0.6 * t.hush), 0.1, 0.95),   // quiet ones stay dark
-      sour: t.venom,                                                  // poisonous ones show magenta
+      sour: 0.5 * t.venom,                                            // poisonous ones show some magenta
       white: 0.1 + 0.7 * t.spite,                                       // spiteful ones spark white
       tears: (0.15 + 0.85 * t.spite) * (1 - t.hush),
       glyphs: pool.slice(0, 2 + Math.floor(rand(0, 8))).join(''),
@@ -468,14 +468,14 @@
         while (c.acc >= 1 && c.energy > 0) { c.acc--; growOne(c); }
       }
       if (c.count > 1) retreat(c);
-      if (c.count > 12 && c.energy > 30 && colonies.length + born_.length < MAX_COLONIES
+      if (c.count > 12 && c.energy > 30 && colonies.length + landed.length < MAX_COLONIES
           && random() < 0.01 * c.spore) {
         const child = throwSpore(c);
-        if (child) born_.push(child);
+        if (child) landed.push(child);
       }
     }
-    colonies.push(...born_);
-    born_.length = 0;
+    colonies.push(...landed);
+    landed.length = 0;
     for (const c of colonies) {
       if (c.count > 0) continue;
       cleared++;
@@ -776,8 +776,8 @@
     h.R = h.r * (1 + 0.6 * hot) * Math.min(1, h.vitality * 3) * (1 - 0.3 * h.sick) * (1 + 0.05 * Math.sin(h.beat));
     h.lobe += 0.05;
 
-    h.x = clamp(h.x + Math.cos(h.a) * h.v, 1, cols - 1);
-    h.y = clamp(h.y + Math.sin(h.a) * h.v, 1, rows - 1);
+    h.x = clamp(h.x + Math.cos(h.a) * h.v, 3, cols - 3);
+    h.y = clamp(h.y + Math.sin(h.a) * h.v, 3, rows - 3);
     h.path.push({ x: h.x, y: h.y });
     if (h.path.length > TAIL) h.path.shift();
   }
@@ -970,6 +970,10 @@
       }
     }
 
+    // fresh cells run from calm blue toward a bright cyan the more worked up it is
+    const heat = Math.min(1, Math.max(...heads.map(h => h.heat)));
+    const fresh = `rgb(${Math.round(47 + 30 * heat)}, ${Math.round(111 + 70 * heat)}, ${Math.round(228 + 22 * heat)})`;
+
     const slot = tickNo >> 2;
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
@@ -984,6 +988,7 @@
         ctx.fillStyle = hurt[i] > tickNo ? (hash(i, slot) % 5 < 3 ? BLACK : RED)
           : stain[i] > tickNo ? STAIN[Math.min(2, (stain[i] - tickNo) >> 3)]
           : core[i] ? NUCLEUS
+          : band(i) === 0 ? fresh
           : FILL[band(i)];
         ctx.fillRect(x * px, y * px, px, px);
       }
