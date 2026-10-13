@@ -45,6 +45,7 @@
 
   let cols, rows, px, dpr;
   let life, born, num, edge, vigor, tint;
+  let germ, germCells, germToGrow, germWait;
   let path, tickNo, head, target = null;
   let paused = false;
 
@@ -70,6 +71,10 @@
       vigor[i] = rand(0.55, 1.45);
       tint[i] = rand(-0.13, 0.13);
     }
+    germ = new Uint8Array(n);      // 1 where the infection is
+    germCells = [];
+    germToGrow = 0;
+    germWait = 40;
     path = [];
     tickNo = 0;
     head = {
@@ -124,8 +129,21 @@
     const h = head;
     const ahead = probe(0), left = probe(-0.8), right = probe(0.8);
 
+    // nearest infected cell, if there is one
+    let prey = -1, preyDist = Infinity;
+    for (const i of germCells) {
+      const d = Math.hypot(i % cols + 0.5 - h.x, Math.floor(i / cols) + 0.5 - h.y);
+      if (d < preyDist) { preyDist = d; prey = i; }
+    }
+
     if (target) {
       turnToward(Math.atan2(target.y - h.y, target.x - h.x), MAX_TURN);
+    } else if (prey >= 0) {
+      // hunt: head straight for it, and open wide when close
+      const px_ = prey % cols + 0.5, py_ = Math.floor(prey / cols) + 0.5;
+      turnToward(Math.atan2(py_ - h.y, px_ - h.x), preyDist < 12 ? 0.22 : 0.12);
+      if (preyDist < 18) { h.rGoal = Math.max(h.rGoal, 8.5); h.rTimer = 10; }
+      h.k = 0;
     } else if (ahead < 3 || Math.min(left, right) < 1) {
       // something in the way: swing to whichever side is more open
       h.a += left > right ? -MAX_TURN : MAX_TURN;
@@ -159,6 +177,7 @@
     const reach = h.r * 1.2 + 1;
     const x0 = Math.max(0, Math.floor(h.x - reach)), x1 = Math.min(cols - 1, Math.floor(h.x + reach));
     const y0 = Math.max(0, Math.floor(h.y - reach)), y1 = Math.min(rows - 1, Math.floor(h.y + reach));
+    let ate = 0;
     for (let y = y0; y <= y1; y++) {
       for (let x = x0; x <= x1; x++) {
         const i = y * cols + x;
@@ -166,6 +185,7 @@
         const rim = h.r * (1 + 0.16 * Math.sin(3 * Math.atan2(dy, dx) + h.lobe));
         const u = (Math.hypot(dx, dy) - edge[i]) / rim;
         if (u >= 1) continue;
+        if (germ[i] && u < 0.85) { germ[i] = 0; ate++; }
         const inward = 1 - Math.max(u, 0);
         const v = TAIL * inward * inward * vigor[i] + 5;
         if (v > life[i]) {
@@ -174,6 +194,87 @@
         }
       }
     }
+    if (ate) {
+      // swallowing makes the head swell
+      h.r = Math.min(11, h.r + 0.05 * ate);
+      germCells = germCells.filter(i => germ[i]);
+      if (!germCells.length) { germToGrow = 0; germWait = rand(50, 140); }
+    }
+  }
+
+  // An infection appears somewhere away from the head and spreads cell by
+  // cell until it reaches its full size or gets eaten.
+  function spawnGerm() {
+    let x, y, tries = 0;
+    do {
+      x = Math.floor(rand(8, cols - 8));
+      y = Math.floor(rand(8, rows - 8));
+    } while (Math.hypot(x - head.x, y - head.y) < 25 && ++tries < 30);
+    const i = y * cols + x;
+    germ[i] = 1;
+    germCells = [i];
+    germToGrow = Math.floor(rand(30, 85));
+  }
+
+  function updateGerm() {
+    if (!germCells.length) {
+      if (--germWait <= 0) spawnGerm();
+      return;
+    }
+    for (let n = 0; n < 2 && germToGrow > 0; n++) {
+      const from = germCells[Math.floor(Math.random() * germCells.length)];
+      const x = from % cols + [1, -1, 0, 0][Math.floor(Math.random() * 4)];
+      const y = Math.floor(from / cols) + [0, 0, 1, -1][Math.floor(Math.random() * 4)];
+      if (x < 1 || y < 1 || x >= cols - 1 || y >= rows - 1) continue;
+      const to = y * cols + x;
+      if (germ[to]) continue;
+      germ[to] = 1;
+      germCells.push(to);
+      germToGrow--;
+    }
+  }
+
+  // cheap repeatable noise, so the glitch holds still for a few ticks at a time
+  function hash(a, b) {
+    let h = Math.imul(a ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(b + 0x7f4a7c15, 0xc2b2ae35);
+    h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12;
+    return h >>> 0;
+  }
+
+  const GERM_FILL = ['#0a0a0a', '#0a0a0a', '#0a0a0a', '#e3122b', '#e3122b', '#7a0613'];
+  const GERM_INK  = ['#e3122b', '#e3122b', '#ffffff', '#0a0a0a', '#0a0a0a', '#ff5a6e'];
+  const GERM_GLYPHS = '0123456789#X';
+
+  function drawGerm() {
+    if (!germCells.length) return;
+    const slot = Math.floor(tickNo / 4);
+    let x0 = cols, x1 = 0, y0 = rows, y1 = 0;
+    for (const i of germCells) {
+      const x = i % cols, y = Math.floor(i / cols);
+      if (x < x0) x0 = x; if (x > x1) x1 = x;
+      if (y < y0) y0 = y; if (y > y1) y1 = y;
+      ctx.fillStyle = GERM_FILL[hash(i, slot) % GERM_FILL.length];
+      ctx.fillRect(x * px, y * px, px, px);
+    }
+    // torn scanlines sticking out of the sides
+    for (let g = 0; g < 3; g++) {
+      const r = hash(g, slot);
+      if (r % 5 < 2) continue;
+      const y = y0 + (r >>> 3) % (y1 - y0 + 1);
+      const len = 2 + (r >>> 9) % 4;
+      const x = (r >>> 13) % 2 ? x1 + 1 - (r >>> 15) % 2 : x0 - len + (r >>> 15) % 2;
+      ctx.fillStyle = (r >>> 17) % 3 ? '#e3122b' : '#0a0a0a';
+      ctx.fillRect(x * px, y * px + px * 0.2, len * px, px * 0.6);
+    }
+  }
+
+  function drawGermGlyphs() {
+    const slot = Math.floor(tickNo / 4);
+    for (const i of germCells) {
+      const r = hash(i, slot);
+      ctx.fillStyle = GERM_INK[r % GERM_INK.length];
+      ctx.fillText(GERM_GLYPHS[(r >>> 8) % GERM_GLYPHS.length], (i % cols) * px + px / 2 + 0.5, Math.floor(i / cols) * px + px / 2 + 1);
+    }
   }
 
   function tick() {
@@ -181,6 +282,7 @@
     for (let i = 0; i < life.length; i++) if (life[i] > 0) life[i]--;
     moveHead();
     stampHead();
+    updateGerm();
   }
 
   function band(i) {
@@ -204,6 +306,8 @@
       }
     }
 
+    drawGerm();
+
     ctx.strokeStyle = '#1b2440';
     ctx.lineWidth = 0.5;
     ctx.globalAlpha = 0.45;
@@ -219,11 +323,12 @@
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
         const i = y * cols + x;
-        if (life[i] <= 0) continue;
+        if (life[i] <= 0 || germ[i]) continue;
         ctx.fillStyle = INK[band(i)];
         ctx.fillText(num[i], x * px + px / 2 + 0.5, y * px + px / 2 + 1);
       }
     }
+    drawGermGlyphs();
   }
 
   const speed = document.getElementById('speed');
