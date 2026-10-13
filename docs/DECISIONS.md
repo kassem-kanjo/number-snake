@@ -4,6 +4,13 @@ What was decided, why, and what was tried and thrown away. Newest first. Benchma
 
 ## 2026-10-13
 
+### One defender in the screensaver; targets are shared out; the ring is alive
+Three requests before the owner first tried the screensaver.
+
+- The screensaver view picks one species at random each time it loads (unless the address chooses), so it never shows both. Checked over 24 loads: 17 warden, 7 hunter, never both.
+- A head will not choose an infection another head has claimed, and if a shared infection shrinks the later arrival lets go. An infection has room for one extra attacker per 250 cells, so a takeover can still be fought by several. Before, sharing was only discouraged by a score penalty. In 200,000 Outbreak ticks two heads were on the same small infection for 18 ticks, down from about 10,000. Lifetimes did not move (median 367 to 369); the hunter's idle time rose to 45 to 52% because it now waits when the only infection is the warden's.
+- The owner on the warden alone: "just seeing a green circle going around isn't nice... maybe the colours breathe through the circle." The ring now carries a loop of eight colours, two turns of it round the circle with a slow wobble, flowing all the time and faster as it closes in; the cell numbers show each cell's place in the flow, so they run round with it; and the band's thickness swells and thins in three travelling waves. The clap's top speed is capped at 0.7 of the thickness so the thin points cannot skip a cell.
+
 ### The clap was not satisfying
 The owner's reaction to the ring: "the actions of squishing is not satisfying." The ring closed at a constant 0.9 cells a tick, armoured cells were still standing inside it afterwards, and the moment it shut looked like any other tick.
 

@@ -120,6 +120,7 @@
   const OWN_NECK = 40;     // newest path points the head doesn't count as an obstacle
   const TAIL = 105;        // ticks a cell under the very centre of the head survives
   const BARRIER = 0.34;    // a creature cell blocks infection while it has more than this share of its life left
+  const SHARE = 250;       // infected cells per extra defender an infection can occupy
   const HIT_GAP = 25;      // ticks before the same infected cell can lose another layer
   const MAX_COLONIES = 6;
   const MAX_HEADS = 5;
@@ -159,7 +160,10 @@
     hollow: 0, glow: 0, cup: 0, crush: 0, cap: 0, capHeat: 0,
   }, {
     id: 1, name: 'warden',
-    // thin ring cells mostly show the first two colours, so those two are the strong ones
+    // thin ring cells mostly show the first two colours, so those two are the strong ones;
+    // `flow` is the loop of colours that runs round the ring while it lives
+    flow: ['#0c8f84', '#12ab97', '#3fd0b4', '#8eeccf', '#d2f7c8', '#b9ec7f', '#6fd98a', '#1fb18f'],
+    flowInk: ['#eafffa', '#02201c', '#02201c', '#063b33', '#2a3d0a', '#2a3d0a', '#073a12', '#02201c'],
     fill: ['#0e9f8a', '#7fe08a', '#c6ee8f', '#e6f7c6', '#0d4440'],
     ink:  ['#021a18', '#073a12', '#2a3d0a', '#3a4a12', '#b9f0e0'],
     nucleus: '#0b5a55', nucleusInk: '#d3f3e2',
@@ -213,6 +217,12 @@
   // Each defender can be taken off the grid and put back; at least one always stays.
   const present = SPECIES.map(sp => query.get(sp.name) !== '0');
   if (!present.includes(true)) present.fill(true);
+  // The screensaver shows one defender at a time, picked afresh each time it
+  // starts (unless the address already chose).
+  if (saver && present.every(Boolean)) {
+    const keep = Math.floor(Math.random() * SPECIES.length);
+    present.forEach((_, k) => { present[k] = k === keep; });
+  }
   const seedHref = () => '?seed=' + seed + (ambient ? '' : '&outbreak=1')
     + SPECIES.filter(sp => !present[sp.id]).map(sp => '&' + sp.name + '=0').join('');
   const seedLink = document.getElementById('seed');
@@ -296,7 +306,7 @@
       heat: 0,          // anger plus how much of the grid is infected
       memory: [],       // where it last fed
       stretch: 1, gaze: a, beat: 0,
-      clap: 0.1, squashed: 0,   // for a ring: how fast it is closing, and what the clap has flattened so far
+      clap: 0.1, squashed: 0, flow: rand(0, 6),   // for a ring: how fast it is closing, and what the clap has flattened so far
       sick: 0,          // poison in its system: slows and shrinks it until it wears off
       vitality: 1,      // a split-off head withers once things calm down
     };
@@ -921,7 +931,7 @@
     // The clap starts as a slow squeeze and accelerates into a slam. It never
     // closes by more than the ring is thick in one tick, so it skips no cell.
     if (h.mode === 'strike') {
-      h.clap = Math.min(sp.hollow, h.clap * (1 + sp.crush * 0.5) + 0.02);
+      h.clap = Math.min(sp.hollow * 0.7, h.clap * (1 + sp.crush * 0.5) + 0.02);   // 0.7: the band's thinnest point
       h.ring = Math.max(0, h.ring - h.clap);
     } else {
       h.clap = 0.1;
@@ -930,6 +940,8 @@
     h.gap += (h.gapGoal - h.gap) * 0.12;
     if (Math.abs(h.gapGoal - h.gap) < 0.06) h.gap = h.gapGoal;   // fully closed means closed
     h.r = h.R = h.ring + sp.hollow / 2;
+    // colour runs round the ring all the time, and quickens as it closes in
+    h.flow += h.mode === 'strike' ? 0.16 : h.mode === 'windup' ? 0.07 : h.mode === 'approach' ? 0.03 : 0.012 + 0.012 * h.arousal;
   }
 
   function moveHead() {
@@ -946,7 +958,15 @@
       const scent = (18 + c.age * 0.15 + Math.sqrt(c.count)) * (1 - 0.75 * c.hush);
       if (!c.noticed && c.near < scent) c.noticed = true;
     }
-    const known = colonies.filter(c => c.noticed && c.count > 0);
+    // Defenders share the work out: an infection another head has claimed is
+    // off limits, so each goes after its own. Only a very large one has room
+    // for more than one attacker.
+    const claimed = c => heads.filter(o => o !== h && o.prey === c).length;
+    const seats = c => 1 + Math.floor(c.count / SHARE);
+    // an infection that has shrunk no longer has room for two: the later arrival lets go
+    if (h.prey && claimed(h.prey) >= seats(h.prey)
+        && heads.some(o => o.prey === h.prey && heads.indexOf(o) < heads.indexOf(h))) h.prey = null;
+    const known = colonies.filter(c => c.noticed && c.count > 0 && (c === h.prey || claimed(c) < seats(c)));
     if (h.prey && h.prey.count <= 0) h.prey = null;
 
     if (!h.prey && (h.mode === 'alert' || h.mode === 'approach' || h.mode === 'windup')) {
@@ -1106,8 +1126,11 @@
   // It is if it lies within half the ring's thickness of the ring radius (a
   // little edge noise keeps the line from looking ruled), and not in the opening.
   function ringCell(h, dx, dy, i) {
-    if (Math.abs(Math.hypot(dx, dy) - h.ring + 0.25 * edge[i]) > h.species.hollow / 2) return false;
-    return !(h.gap > 0 && Math.abs(angleDiff(Math.atan2(dy, dx), h.a)) < h.gap);
+    // the band swells and thins in three slow waves that travel round it, so the ring is never a dead outline
+    const th = Math.atan2(dy, dx);
+    const half = h.species.hollow / 2 * (1 + 0.28 * Math.sin(3 * th + 2 * h.lobe));
+    if (Math.abs(Math.hypot(dx, dy) - h.ring + 0.25 * edge[i]) > half) return false;
+    return !(h.gap > 0 && Math.abs(angleDiff(th, h.a)) < h.gap);
   }
 
   // A solid head is a lumpy disc. A cell under its centre gets a full life;
@@ -1238,6 +1261,27 @@
   // it is there, one lighter tone as it fades
   const ringShade = i => life[i] > 0.45 * born[i] ? 0 : 1;
 
+  // Where a ring cell sits in the loop of colours flowing round its ring, 0 to 1.
+  // Two turns of the loop fit round the ring, with a slow wobble, so the
+  // colours breathe through it instead of marching.
+  let rings = [];
+  // a living ring cell takes its colour from the flow; one that is fading goes pale
+  function ringColour(sp, x, y, i, loop, plain) {
+    const f = ringFlow(x, y);
+    return f < 0 || ringShade(i) ? plain[3] : loop[Math.floor(f * loop.length)];
+  }
+  function ringFlow(x, y) {
+    let best = null, off = Infinity;
+    for (const h of rings) {
+      const d = Math.abs(Math.hypot(x + 0.5 - h.x, y + 0.5 - h.y) - h.ring);
+      if (d < off) { off = d; best = h; }
+    }
+    if (!best) return -1;
+    const th = Math.atan2(y + 0.5 - best.y, x + 0.5 - best.x);
+    const v = th / Math.PI + best.flow * 0.25 + 0.18 * Math.sin(3 * th - best.flow * 0.6);
+    return v - Math.floor(v);
+  }
+
   function band(i) {
     const f = life[i] / born[i] + tint[i];
     let b = 0;
@@ -1329,6 +1373,7 @@
       return `rgb(${sp.cold.map((c, k) => Math.round(c + (sp.warm[k] - c) * heat)).join(', ')})`;
     });
 
+    rings = heads.filter(h => h.species.hollow);
     const slot = tickNo >> 2;
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
@@ -1344,8 +1389,9 @@
         ctx.fillStyle = hurt[i] > tickNo ? (hash(i, slot) % 5 < 3 ? BLACK : RED)
           : stain[i] > tickNo ? STAIN[Math.min(2, (stain[i] - tickNo) >> 3)]
           : core[i] ? sp.nucleus
+          : sp.hollow ? ringColour(sp, x, y, i, sp.flow, sp.fill)
           : band(i) === 0 ? fresh[sp.id]
-          : sp.fill[sp.hollow ? ringShade(i) : band(i)];
+          : sp.fill[band(i)];
         ctx.fillRect(x * px, y * px, px, px);
       }
     }
@@ -1404,10 +1450,16 @@
         const i = y * cols + x;
         if (life[i] <= 0 || germ[i]) continue;
         const sp = SPECIES[who[i]];
-        ctx.fillStyle = hurt[i] > tickNo ? (hash(i, slot) % 5 < 3 ? RED : BLACK) : core[i] && stain[i] <= tickNo ? sp.nucleusInk : sp.ink[sp.hollow ? ringShade(i) : band(i)];
-        // the number is how much life the cell has left, 8 down to 1
-        // (on a square-root scale, so the low end isn't all ones)
-        ctx.fillText(Math.max(1, Math.ceil(Math.sqrt(life[i] / FULL) * 8)), x * px + px / 2 + 0.5, y * px + px / 2 + 1);
+        const flowing = sp.hollow && hurt[i] <= tickNo ? ringFlow(x, y) : -1;
+        ctx.fillStyle = hurt[i] > tickNo ? (hash(i, slot) % 5 < 3 ? RED : BLACK)
+          : core[i] && stain[i] <= tickNo ? sp.nucleusInk
+          : sp.hollow ? ringColour(sp, x, y, i, sp.flowInk, sp.ink)
+          : sp.ink[band(i)];
+        // The number is how much life the cell has left, 8 down to 1 (on a
+        // square-root scale, so the low end isn't all ones). On a ring it is
+        // the cell's place in the flow instead, so the numbers run round it.
+        const digit = flowing >= 0 ? 1 + Math.floor(flowing * 8) : Math.max(1, Math.ceil(Math.sqrt(life[i] / FULL) * 8));
+        ctx.fillText(digit, x * px + px / 2 + 0.5, y * px + px / 2 + 1);
       }
     }
     drawColonyGlyphs();
