@@ -773,7 +773,7 @@
     // the more infection there is, the bigger it gets; a withering head shrinks away
     // a pulse runs through it, slow at rest and quick when it is worked up
     h.beat += 0.06 + 0.1 * h.arousal + 0.25 * hot;
-    h.R = h.r * (1 + 0.6 * hot) * Math.min(1, h.vitality * 3) * (1 - 0.3 * h.sick) * (1 + 0.05 * Math.sin(h.beat));
+    h.R = h.r * (1 + 0.45 * hot) * Math.min(1, h.vitality * 3) * (1 - 0.3 * h.sick) * (1 + 0.05 * Math.sin(h.beat));
     h.lobe += 0.05;
 
     h.x = clamp(h.x + Math.cos(h.a) * h.v, 3, cols - 3);
@@ -832,7 +832,7 @@
     }
     if (ate) {
       // swallowing makes the head swell, and fills it up
-      h.r = Math.min(14, h.r + 0.05 * ate);
+      h.r = Math.min(11, h.r + 0.05 * ate);
       h.fullness = Math.min(1, h.fullness + 0.004 * ate);
     }
     for (const c of colonies) {
