@@ -35,6 +35,7 @@ final class NumberSnakeSaverView: ScreenSaverView, WKNavigationDelegate {
 
     private func commonInit() {
         wantsLayer = true
+        animationTimeInterval = 1.0 / 30.0   // how often animateOneFrame is called
         layer?.backgroundColor = pageColour.cgColor   // dark from the first frame, even before the page loads
         // macOS tells us when the saver is about to end; stopAnimation alone is not dependable.
         DistributedNotificationCenter.default().addObserver(
@@ -65,8 +66,11 @@ final class NumberSnakeSaverView: ScreenSaverView, WKNavigationDelegate {
         DispatchQueue.main.async { [weak self] in self?.tearDown() }
     }
 
-    // The saver draws nothing itself; WebKit animates the page.
-    override func animateOneFrame() {}
+    // WebKit does not run a page's own animation frames inside the screensaver host, because the
+    // system does not count the web view as visible. So the saver's frame callback drives the page.
+    override func animateOneFrame() {
+        web?.evaluateJavaScript("window.numberSnakeStep && window.numberSnakeStep()", completionHandler: nil)
+    }
     override var hasConfigureSheet: Bool { false }
     override var configureSheet: NSWindow? { nil }
 

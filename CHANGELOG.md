@@ -4,6 +4,11 @@ Notable changes to Number Snake. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-10-13
+
+### Fixed
+- The Mac screensaver showed an empty grid with nothing moving. The page's animation frames never fire inside macOS's screensaver host, so the screensaver now drives the page itself.
+
 ## [0.3.2] - 2026-10-13
 
 ### Changed
