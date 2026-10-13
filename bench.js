@@ -59,7 +59,7 @@ for (let t = 0; t < ticks; t++) {
   s.tick();
   if (s.infected > maxInfected) maxInfected = s.infected;
   if (s.colonies.length > 1) several++;
-  if (s.heads.length > 1) split++;
+  if (s.heads.some(h => !h.root)) split++;   // the permanent heads don't count as a split
   if (s.heads.length > maxHeads) maxHeads = s.heads.length;
   modes[s.head.mode] = (modes[s.head.mode] || 0) + 1;
   const ids = new Set();
@@ -88,6 +88,7 @@ console.log(JSON.stringify({
   maxGeneration: maxGen,
   splitPct: pct(split),
   growthBlockedByTrail: s.walled,
+  eatenShare: Object.fromEntries(s.species.map(sp => [sp.name, Math.round(100 * s.ateBy[sp.id] / (s.ateBy.reduce((a, b) => a + b, 0) || 1))])),
   maxHeads,
 }, null, 1));
 
