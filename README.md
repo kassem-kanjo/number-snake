@@ -8,6 +8,7 @@ Open `index.html` in any web browser. There is nothing to install.
 
 - Hold the mouse button down to steer the creature toward the pointer. Let go and it goes back to its own behaviour.
 - Hover over an infected cell (button up) to read that infection's nature in a small panel.
+- Double-click an empty cell to drop a new infection there.
 - Space pauses and resumes. R restarts with a new grid.
 - The Pause and Restart buttons do the same as the keys.
 - The Speed slider sets how many simulation steps run per second.
@@ -17,6 +18,9 @@ Open `index.html` in any web browser. There is nothing to install.
 
 - **Blue cells** are the creature's body. A freshly touched cell is bright blue. It fades through cyan, violet and mint into dark navy as its life runs out.
 - **The trail** is thickest under the centre of the creature and thins toward its edge.
+- **The body** stretches out along its heading when it moves fast and sits squat when it is still.
+- **The dark violet patch** inside the creature is its nucleus. It leans toward whatever the creature is watching, so you can see it notice an infection before it moves, and it tightens when the creature coils to strike.
+- **Faint pink cells** mark where infection was recently eaten. They fade.
 - **Numbers** appear on the cells the creature has passed over. Each is rolled from 1 to 8. The code gives them no further meaning.
 - **Violet-to-pink cells** are infected cells being swallowed and dissolving.
 - **Black and red flickering cells** in the creature's body are parts that have been corrupted after a bite bounced off armour.
@@ -24,7 +28,8 @@ Open `index.html` in any web browser. There is nothing to install.
 - **Small red and black flecks** scatter from the spot where an infection dies. Bigger infections scatter more.
 - **Red and black cells** are infected cells. Armoured cells, which take several bites, go almost solid black.
 - **Glyphs** are small symbols drawn in an infection's cells. Each infection has its own set. Spiteful infections spark white or pink.
-- **Flicker**: an infection's look changes every few ticks. Jumpy infections flicker faster.
+- **Flicker**: an infection's look changes every few ticks. Jumpy infections flicker faster, and ones that hide flicker slowly and stay dark.
+- **Magenta cells** in an infection mean it is poisonous. Eating them slows and shrinks the creature for a while.
 - **Torn scanlines** are short red or black bars sticking out of an infection's sides. Bigger infections have more of them.
 
 ## How it works
@@ -44,6 +49,8 @@ Each infection rolls its own values for these traits. They are independent, so a
 | lure | -1 to 1 | Grows toward (+) or away from (-) the creature |
 | drive | 0 to 1 | Creeps in one direction |
 | spore | 0 to 1 | How readily it throws off offspring |
+| hush | 0 to 1 | How well it hides its scent, so the creature notices it later |
+| venom | 0 to 1 | How sick it makes whatever eats it |
 
 A spore child copies its parent's traits with small random nudges.
 
@@ -71,7 +78,7 @@ An infection with enough cells and energy can throw a spore. The child lands 10 
 
 ### Dividing under pressure
 
-When heat gets high enough, the creature can pinch into several heads, up to a fixed maximum. The heads spring apart and hunt separately. When things calm down, the extra heads wither and disappear. The original head always stays.
+When heat gets high enough, the creature can pinch into several heads, up to a fixed maximum. The heads spring apart and hunt separately. When things calm down, the extra heads wither and disappear. The original head always stays. Two heads after the same infection come round it from opposite sides.
 
 ## Testing
 

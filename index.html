@@ -624,7 +624,8 @@
     };
     return {
       orbit: roll.orbit,
-      side: random() < 0.5 ? 1 : -1,
+      // two heads on the same prey come round it from opposite sides
+      side: (heads.find(o => o !== h && o.prey === c && o.plan) || { plan: { side: random() < 0.5 ? -1 : 1 } }).plan.side * -1,
       weave: roll.weave, weaveRate: rand(0.03, 0.1), phase: rand(0, 6.3),
       pace: roll.pace * (1 + hot),
       strikeDist: roll.strikeDist,
