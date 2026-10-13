@@ -40,7 +40,7 @@
   <label>Speed <input id="speed" type="range" min="4" max="140" value="55"></label>
   <a id="seed" class="hint" title="Link to this exact run"></a>
   <span id="tally" class="hint"></span>
-  <span class="hint">hold to steer · double-click to infect · hover to inspect · space pauses · R restarts</span>
+  <span class="hint">hold to steer · double-click to infect · hover anything to inspect · space pauses · R restarts</span>
 </div>
 <script>
 (() => {
@@ -1128,20 +1128,46 @@
     return germ[i] > 0 ? byId.get(owner[i]) || null : null;
   }
 
+  // the head under the cursor, if the cursor is on a creature
+  function headAt(clientX, clientY) {
+    const b = canvas.getBoundingClientRect();
+    const x = (clientX - b.left) / px, y = (clientY - b.top) / px;
+    return heads.find(h => Math.hypot(h.x - x, h.y - y) < h.R) || null;
+  }
+
+  const DOING = {
+    alert: 'noticed something', approach: 'closing in', windup: 'coiling', strike: 'striking',
+    recover: 'pulling back', recoil: 'thrown back', digest: 'digesting',
+  };
+
   function showTip() {
     const c = hover && !target ? colonyAt(hover.x, hover.y) : null;
-    if (!c) { tip.style.display = 'none'; return; }
+    const who = hover && !target && !c ? headAt(hover.x, hover.y) : null;
+    if (!c && !who) { tip.style.display = 'none'; return; }
     let html = '';
-    for (const [key, name] of SHOWN) {
-      if (!TRAITS[key] || typeof c.traits[key] !== 'number') continue;   // unknown trait: skip
-      const [lo, hi] = TRAITS[key];
-      html += tipRow(name, (c.traits[key] - lo) / (hi - lo), '', lo < 0);
+    if (c) {
+      for (const [key, name] of SHOWN) {
+        if (!TRAITS[key] || typeof c.traits[key] !== 'number') continue;   // unknown trait: skip
+        const [lo, hi] = TRAITS[key];
+        html += tipRow(name, (c.traits[key] - lo) / (hi - lo), '', lo < 0);
+      }
+      html += '<div class="sep"></div>';
+      html += tipRow('cells', null, c.count, false);
+      html += tipRow('generation', null, c.gen, false);
+      html += tipRow('energy left', c.energy / c.budget, Math.round(100 * clamp(c.energy / c.budget, 0, 1)) + '%', false);
+      html += tipRow('hits left', null, Math.max(0, Math.floor(c.fury)), false);
+    } else {
+      // the creature: what it is doing and how it feels
+      html += tipRow(DOING[who.mode] || (who.arousal < 0.25 ? 'dozing' : 'roaming'), null, '', false);
+      html += '<div class="sep"></div>';
+      html += tipRow('awake', who.arousal, '', false);
+      html += tipRow('restless', who.restless, '', false);
+      html += tipRow('full', who.fullness, '', false);
+      html += tipRow('angry', who.anger, '', false);
+      html += tipRow('worked up', who.heat / 1.5, '', false);
+      html += tipRow('poisoned', who.sick, '', false);
+      if (who !== heads[0]) html += tipRow('strength left', who.vitality, '', false);
     }
-    html += '<div class="sep"></div>';
-    html += tipRow('cells', null, c.count, false);
-    html += tipRow('generation', null, c.gen, false);
-    html += tipRow('energy left', c.energy / c.budget, Math.round(100 * clamp(c.energy / c.budget, 0, 1)) + '%', false);
-    html += tipRow('hits left', null, Math.max(0, Math.floor(c.fury)), false);
     tip.innerHTML = html;
     tip.style.display = 'block';
     // sit beside the cursor, flipped or nudged so it stays inside the window

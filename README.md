@@ -7,7 +7,7 @@ A grid of small numbered cells with a blue creature, shaped after a white blood 
 Open `index.html` in any web browser. There is nothing to install.
 
 - Hold the mouse button down to steer the creature toward the pointer. Let go and it goes back to its own behaviour.
-- Hover over an infected cell (button up) to read that infection's nature in a small panel.
+- Hover over an infected cell (button up) to read that infection's nature in a small panel. Hover over the creature to see what it is doing and how it feels.
 - Double-click an empty cell to drop a new infection there.
 - Space pauses and resumes. R restarts with a new grid.
 - The Pause and Restart buttons do the same as the keys.
