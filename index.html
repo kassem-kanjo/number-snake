@@ -13,7 +13,7 @@
   button { font: inherit; color: #ddd; background: #1c1c20; border: 1px solid #333; border-radius: 7px; padding: 7px 12px; cursor: pointer; }
   button:hover { background: #26262b; }
   label { display: flex; gap: 8px; align-items: center; }
-  input[type=range] { width: 120px; accent-color: #e8552b; }
+  input[type=range] { width: 120px; accent-color: #2f6fe4; }
   .hint { opacity: .7; }
 </style>
 </head>
@@ -22,7 +22,7 @@
 <div id="bar">
   <button id="pause">Pause</button>
   <button id="restart">Restart</button>
-  <label>Speed <input id="speed" type="range" min="4" max="90" value="26"></label>
+  <label>Speed <input id="speed" type="range" min="4" max="140" value="55"></label>
   <span class="hint">Hold the mouse down on the grid to steer · space = pause · R = restart</span>
 </div>
 <script>
@@ -32,11 +32,13 @@
   const stage = document.getElementById('stage');
 
   // Colour is how many layers of the snake are stacked on a cell.
-  const FILL = [null, '#e8552b', '#7d70e2', '#eba6d6', '#e6e545', '#3f7d1f'];
-  const INK  = [null, '#6a1206', '#17146b', '#5c1d4f', '#4b4a00', '#0c2604'];
+  const FILL = [null, '#2f6fe4', '#5cd0e0', '#9d8df5', '#a9f2d4', '#18245e'];
+  const INK  = [null, '#06163f', '#06404a', '#221463', '#0d4a35', '#b9c6ff'];
 
   const STEP = 0.4;        // cells the head moves per tick
-  const MAX_TURN = 0.09;   // radians per tick
+  const MAX_TURN = 0.065;   // radians per tick
+  const LOOK = 9;          // how far ahead the head looks, in cells
+  const OWN_NECK = 55;     // newest path points the head doesn't count as an obstacle
   const COOLDOWN = 60;     // ticks before the same layer can touch a cell again
 
   // The snake is a row of discs following the head's path. Discs with s:+1 add
@@ -44,16 +46,16 @@
   // removers use the same radii as the adders, so the body dissolves exactly.
   const cells = n => Math.round(n / STEP);
   const DISCS = [
-    { lag: cells(0),   r: 1.2,  s: +1 },
-    { lag: cells(22),  r: 2.5,  s: +1 },
-    { lag: cells(34),  r: 3.2,  s: +1 },
-    { lag: cells(46),  r: 0.7,  s: +1 },
-    { lag: cells(56),  r: 0.35, s: +1 },
-    { lag: cells(118), r: 0.35, s: -1 },
-    { lag: cells(128), r: 0.7,  s: -1 },
-    { lag: cells(140), r: 3.2,  s: -1 },
-    { lag: cells(154), r: 2.5,  s: -1 },
-    { lag: cells(174), r: 1.2,  s: -1 },
+    { lag: cells(0),  r: 1.2,  s: +1 },
+    { lag: cells(6),  r: 2.5,  s: +1 },
+    { lag: cells(10), r: 3.2,  s: +1 },
+    { lag: cells(14), r: 0.7,  s: +1 },
+    { lag: cells(17), r: 0.35, s: +1 },
+    { lag: cells(30), r: 0.35, s: -1 },
+    { lag: cells(33), r: 0.7,  s: -1 },
+    { lag: cells(37), r: 3.2,  s: -1 },
+    { lag: cells(41), r: 2.5,  s: -1 },
+    { lag: cells(46), r: 1.2,  s: -1 },
   ];
   const MAX_LAG = Math.max(...DISCS.map(d => d.lag));
 
@@ -108,19 +110,40 @@
     head.a += Math.max(-rate, Math.min(rate, d));
   }
 
+  // Free space around a point: distance to the nearest wall or to the
+  // snake's own body (ignoring the stretch right behind the head).
+  function clearance(x, y) {
+    let c = Math.min(x, y, cols - x, rows - y) - 3;
+    for (let i = path.length - 1 - OWN_NECK; i >= 0; i -= 2) {
+      const d = Math.hypot(path[i].x - x, path[i].y - y) - 3.2 * path[i].w;
+      if (d < c) c = d;
+    }
+    return c;
+  }
+
+  function probe(offset) {
+    const a = head.a + offset;
+    const cx = Math.cos(a), cy = Math.sin(a);
+    return Math.min(
+      clearance(head.x + cx * LOOK, head.y + cy * LOOK),
+      clearance(head.x + cx * LOOK / 2, head.y + cy * LOOK / 2));
+  }
+
   function moveHead() {
     const h = head;
-    const margin = 6;
-    const outside = h.x < margin || h.y < margin || h.x > cols - margin || h.y > rows - margin;
+    const ahead = probe(0), left = probe(-0.8), right = probe(0.8);
 
     if (target) {
       turnToward(Math.atan2(target.y - h.y, target.x - h.x), MAX_TURN);
-    } else if (outside) {
-      turnToward(Math.atan2(rows / 2 - h.y, cols / 2 - h.x), MAX_TURN * 0.8);
+    } else if (ahead < 4 || Math.min(left, right) < 2) {
+      // something in the way: swing to whichever side is more open
+      h.a += left > right ? -MAX_TURN : MAX_TURN;
+      h.k = 0;
+      h.kTimer = 0;
     } else {
       // wander: curvature drifts toward a goal that changes now and then
       if (--h.kTimer <= 0) {
-        h.kGoal = Math.random() < 0.2 ? rand(-MAX_TURN, MAX_TURN) : rand(-0.04, 0.04);
+        h.kGoal = Math.random() < 0.2 ? rand(-MAX_TURN, MAX_TURN) : rand(-0.03, 0.03);
         h.kTimer = rand(30, 110);
       }
       h.k += (h.kGoal - h.k) * 0.06;
@@ -182,9 +205,9 @@
       }
     }
 
-    ctx.strokeStyle = '#1a1a1a';
-    ctx.lineWidth = 1;
-    ctx.globalAlpha = 0.75;
+    ctx.strokeStyle = '#1b2440';
+    ctx.lineWidth = 0.5;
+    ctx.globalAlpha = 0.45;
     ctx.beginPath();
     for (let x = 1; x < cols; x++) { ctx.moveTo(x * px + 0.5, 0); ctx.lineTo(x * px + 0.5, rows * px); }
     for (let y = 1; y < rows; y++) { ctx.moveTo(0, y * px + 0.5); ctx.lineTo(cols * px, y * px + 0.5); }
