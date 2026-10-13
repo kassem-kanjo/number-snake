@@ -4,7 +4,12 @@ Notable changes to Number Snake. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-13
+
 ### Added
+- A Mac app and a Mac screensaver, with an icon, as downloads on each release. Build them yourself with `mac/build.sh`.
+- A button for each defender, to take it off the grid or put it back. Run links carry the choice (`hunter=0`, `warden=0`).
+- An icon and link-preview details on the page, so a shared link shows a title, a description and the icon.
 - MIT licence.
 - A hosted version at https://kassem-kanjo.github.io/number-snake/.
 - The creature's fresh trail is a barrier: infection cannot grow, or back away, into cells the creature has just covered.

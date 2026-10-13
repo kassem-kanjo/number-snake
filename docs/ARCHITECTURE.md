@@ -55,6 +55,7 @@ Drawing happens separately, once per animation frame in which at least one tick 
 ## Rules that must hold
 
 - **The fresh trail blocks infection.** `pickFrontier` refuses any creature cell with more than `BARRIER` of its life left, for growth and for retreat alike.
+- **At least one defender is always present.** `setPresent` refuses to remove the last species.
 - **Infections cannot win.** Growth only ever spends `energy`, spores hand over part of the parent's energy, and nothing adds energy. The creature gets stronger with `heat`.
 - **Seeded runs replay exactly.** Tick logic uses only `random()`. `Math.random()` is used only to pick a seed, in `reset`, when the address did not ask for one. Drawing and hover code must not call `random()` or change simulation state. User input (steering, double-click) is allowed to change a run.
 - **Bookkeeping stays consistent.** `infected` equals the number of cells with `germ > 0`; each colony's `count` equals the cells it owns. Only `addCell` and `removeCell` change these.

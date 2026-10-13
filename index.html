@@ -4,6 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Number Snake</title>
+<meta name="description" content="A grid of numbered cells where two living defenders hunt glitchy red-and-black infections. Nothing is scripted.">
+<link rel="icon" type="image/png" href="mac/icon.png">
+<link rel="apple-touch-icon" href="mac/icon.png">
+<meta name="theme-color" content="#0b0b0c">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Number Snake">
+<meta property="og:description" content="A grid of numbered cells where two living defenders hunt glitchy red-and-black infections. Nothing is scripted.">
+<meta property="og:url" content="https://kassem-kanjo.github.io/number-snake/">
+<meta property="og:image" content="https://kassem-kanjo.github.io/number-snake/mac/icon.png">
+<meta name="twitter:card" content="summary">
 <style>
   html, body { margin: 0; height: 100%; background: #0b0b0c; overflow: hidden; }
   body { display: flex; flex-direction: column; font: 13px/1 -apple-system, "Helvetica Neue", Arial, sans-serif; color: #9a9aa0; }
@@ -44,6 +54,11 @@
   input[type=range] { width: 120px; accent-color: #2f6fe4; }
   .hint { opacity: .7; }
   button.on { border-color: #e3122b; color: #ff8a98; }
+  /* one button per defender: lit in its own colour while it is on the grid */
+  button.cast { display: inline-flex; align-items: center; gap: 7px; text-transform: capitalize; color: #77777f; }
+  button.cast::before { content: ''; width: 9px; height: 9px; border-radius: 2px; background: var(--ink, #555); opacity: .35; transition: opacity .25s; }
+  button.cast.here { color: #ddd; border-color: var(--ink, #555); }
+  button.cast.here::before { opacity: 1; }
   #seed { color: inherit; text-decoration: none; border-bottom: 1px dotted #555; }
   #tip { position: fixed; left: 0; top: 0; z-index: 5; display: none; width: 236px; box-sizing: border-box; padding: 9px 10px;
          background: #141417; border: 1px solid #333; border-radius: 8px; color: #c4c4ca; font-size: 11px; line-height: 1;
@@ -69,6 +84,8 @@
         <button id="restart">Restart</button>
         <button id="record" title="Save a video clip of the grid">Record</button>
         <button id="outbreak" title="More, bigger and faster infections, several at once">Outbreak</button>
+        <button id="sp0" class="cast"></button>
+        <button id="sp1" class="cast"></button>
         <button id="full" title="Nothing but the grid (F)">Fullscreen</button>
         <label>Speed <input id="speed" type="range" min="4" max="140" value="55"></label>
         <a id="seed" class="hint" title="Link to this exact run"></a>
@@ -187,7 +204,11 @@
   // `saver=1` is the view the screensaver uses: no controls, no cursor, no input.
   const saver = query.get('saver') === '1';
   if (saver && document.body) document.body.classList.add('saver');
-  const seedHref = () => '?seed=' + seed + (ambient ? '' : '&outbreak=1');
+  // Each defender can be taken off the grid and put back; at least one always stays.
+  const present = SPECIES.map(sp => query.get(sp.name) !== '0');
+  if (!present.includes(true)) present.fill(true);
+  const seedHref = () => '?seed=' + seed + (ambient ? '' : '&outbreak=1')
+    + SPECIES.filter(sp => !present[sp.id]).map(sp => '&' + sp.name + '=0').join('');
   const seedLink = document.getElementById('seed');
   const tally = document.getElementById('tally');
 
@@ -243,7 +264,8 @@
     // the two permanent heads start well apart, one in each half, on a random side
     const flip = random() < 0.5;
     const spot = k => cols * rand(0.15, 0.35) + (flip === (k === 0) ? 0 : cols * 0.5);
-    heads = SPECIES.map((sp, k) => newHead(sp, true, spot(k), rows * rand(0.3, 0.7), rand(0, Math.PI * 2)));
+    heads = SPECIES.map((sp, k) => newHead(sp, true, spot(k), rows * rand(0.3, 0.7), rand(0, Math.PI * 2)))
+      .filter(h => present[h.species.id]);
     head = heads[0];
   }
 
@@ -712,7 +734,10 @@
   // ambush, a string of quick bites, a tightening spiral or a slow engulfing
   // are just regions of this space, with everything in between.
   // how worked up a head is, as far as its temperament lets it show
-  const feel = h => Math.min(1, h.heat) * h.species.heatPull;
+  // A defender with no partner on the grid can't afford to stay calm:
+  // alone, any species feels the full heat and may divide.
+  const alone = () => present.filter(Boolean).length === 1;
+  const feel = h => Math.min(1, h.heat) * (alone() ? 1 : h.species.heatPull);
 
   function makePlan(c) {
     const h = head, sp = h.species, hot = feel(h);
@@ -1012,7 +1037,7 @@
     const split = [];
     for (const h of heads) {
       if (heads.length + split.length < MAX_HEADS && h.r > 4 && h.vitality > 0.5
-          && random() < 0.002 * Math.max(0, h.heat - 0.65) * h.species.splits) {
+          && random() < 0.002 * Math.max(0, h.heat - 0.65) * (alone() ? 1 : h.species.splits)) {
         split.push(divide(h));
       }
       if (!h.root) h.vitality = clamp(h.vitality + 0.01 * (h.heat - 0.2), 0, 1);
@@ -1379,6 +1404,35 @@
     recordBtn.classList.add('live');
   };
 
+  const castBtns = SPECIES.map(sp => document.getElementById('sp' + sp.id));
+  function setPresent(id, on) {
+    // the last one can't leave: asking it to brings the others back instead
+    if (!on && present.filter(Boolean).length === 1) {
+      SPECIES.forEach(sp => { if (sp.id !== id) setPresent(sp.id, true); });
+      return;
+    }
+    present[id] = on;
+    if (!on) {
+      heads = heads.filter(h => h.species.id !== id);
+    } else if (!heads.some(h => h.root && h.species.id === id)) {
+      heads.push(newHead(SPECIES[id], true, cols * rand(0.2, 0.8), rows * rand(0.2, 0.8), rand(0, Math.PI * 2)));
+      heads.sort((a, b) => a.species.id - b.species.id);   // keeps the first species as the one you steer
+    }
+    head = heads[0];
+    castBtns.forEach((btn, k) => btn.classList.toggle('here', present[k]));
+    seedLink.href = seedHref();
+    sizePanel();
+    draw();
+  }
+  SPECIES.forEach(sp => {
+    const btn = castBtns[sp.id];
+    btn.textContent = sp.name;
+    btn.title = 'Take the ' + sp.name + ' off the grid, or put it back';
+    btn.style.setProperty('--ink', sp.fill[0]);
+    btn.classList.toggle('here', present[sp.id]);
+    btn.onclick = () => setPresent(sp.id, !present[sp.id]);
+  });
+
   const outbreakBtn = document.getElementById('outbreak');
   function setAmbient(on) {
     ambient = on;
@@ -1442,6 +1496,7 @@
     get walled() { return walled; },
     get ateBy() { return ateBy; },
     get species() { return SPECIES; },
+    setPresent,
     get colonies() { return colonies; },
     get infected() { return infected / area; },
     tick, draw, restart, setAmbient,

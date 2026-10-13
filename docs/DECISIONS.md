@@ -4,6 +4,11 @@ What was decided, why, and what was tried and thrown away. Newest first. Benchma
 
 ## 2026-10-13
 
+### A button for each defender; a lone defender loses its calm
+Each species has a button that removes it from the grid or returns it. One must always stay, or infections could win, so asking the last one to leave brings the others back.
+
+The warden alone could not keep up in Outbreak mode: median outbreak life 1708 ticks, the slowest 10% over 5000, one siege of 26,987 ticks (about 8 minutes), peak infection 54%. Rather than special-casing it, the rule is that any species with no partner on the grid feels the full heat and may divide, whatever its own numbers say. Warden alone after that: median about 1300, slowest 10% about 3600, longest 10,900 to 13,000, every outbreak cleared. Still slow, by choice of whoever switched the hunter off. Hunter alone matches the old single-creature numbers (median 551, slowest 10% 1431). Calm mode is fine either way.
+
 ### A second species: the warden
 Added a second permanent defender beside the hunter (GitHub issue #5). The owner asked for "one that circles then crushes the virus, and it acts way more calm and calculated". The warden is teal and green, so it reads apart from the blue hunter. Each species is a record of numbers in one `SPECIES` table, and no code chooses behaviour by species name.
 
