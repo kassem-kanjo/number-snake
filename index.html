@@ -31,26 +31,39 @@
   const ctx = canvas.getContext('2d');
   const stage = document.getElementById('stage');
 
-  // Colour is how much of its life a cell has left: fresh cells are the
-  // first colour, and they run through the rest as they fade out.
+  // Nothing here is scripted. Every infection is born with its own randomly
+  // rolled traits, and every attack the creature makes is a freshly rolled
+  // plan, so no two encounters are built from the same parts. The numbers in
+  // this file are ranges and limits, not behaviours.
+
+  // Creature colour is how much of its life a cell has left: fresh cells are
+  // the first colour, and they run through the rest as they fade out.
   const FILL = ['#2f6fe4', '#5cd0e0', '#9d8df5', '#a9f2d4', '#18245e'];
   const INK  = ['#06163f', '#06404a', '#221463', '#0d4a35', '#b9c6ff'];
   const BANDS = [0.72, 0.52, 0.34, 0.17];   // life fractions where the colour changes
 
-  const STEP = 0.65;       // cells the head moves per tick
-  const MAX_TURN = 0.065;  // radians per tick
+  const BLACK = '#0a0a0a', RED = '#e3122b', BLOOD = '#7a0613', PINK = '#ff5a6e';
+  const GLYPH_POOL = '0123456789#X%/\\<>=+*?!:;[]{}^~';
+
+  const STEP = 0.65;       // cells the head moves per tick at an easy pace
+  const MAX_TURN = 0.065;  // radians per tick when it isn't in a hurry
   const LOOK = 15;         // how far ahead the head looks, in cells
   const OWN_NECK = 40;     // newest path points the head doesn't count as an obstacle
-  const TAIL = 105;
-  const HIT_GAP = 25;      // ticks before the same infected cell can lose another layer        // ticks a cell under the very centre of the head survives
+  const TAIL = 105;        // ticks a cell under the very centre of the head survives
+  const HIT_GAP = 25;      // ticks before the same infected cell can lose another layer
+  const MAX_COLONIES = 6;
 
-  let cols, rows, px, dpr;
-  let life, born, num, edge, vigor, tint;
-  let germ, germHit, germCells, germToGrow, germWait, germAge, kind, hurt;
+  let cols, rows, px, dpr, area;
+  let life, born, num, edge, vigor, tint, hurt;
+  let germ, germHit, owner;
+  let colonies, byId, nextId, infected, pressure, pressureGoal, pressureTimer;
   let path, tickNo, head, target = null;
   let paused = false;
 
   const rand = (a, b) => a + Math.random() * (b - a);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const skew = p => Math.pow(Math.random(), p);   // p > 1 leans toward 0
+  const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
   // 1 + seven coin flips: 1..8, clustered around 4 and 5
   function rollNumber() {
@@ -59,14 +72,23 @@
     return n;
   }
 
+  // cheap repeatable noise, so a glitch holds still for a few ticks at a time
+  function hash(a, b) {
+    let h = Math.imul(a ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(b + 0x7f4a7c15, 0xc2b2ae35);
+    h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12;
+    return h >>> 0;
+  }
+
   function reset() {
     const n = cols * rows;
-    life = new Float32Array(n);    // ticks left
-    born = new Float32Array(n);    // life it was last topped up to
+    area = n;
+    life = new Float32Array(n);    // creature: ticks left
+    born = new Float32Array(n);    // creature: life it was last topped up to
     num = new Uint8Array(n);
     edge = new Float32Array(n);    // per-cell noise: ragged outline
     vigor = new Float32Array(n);   // per-cell noise: how long it lasts
     tint = new Float32Array(n);    // per-cell noise: when it changes colour
+    hurt = new Int32Array(n);      // creature cells look corrupted until this tick
     for (let i = 0; i < n; i++) {
       edge[i] = rand(-0.9, 0.9);
       vigor[i] = rand(0.55, 1.45);
@@ -74,21 +96,29 @@
     }
     germ = new Uint8Array(n);      // infection: armour layers left on the cell, 0 = none
     germHit = new Int32Array(n).fill(-1e9);   // tick the cell last lost a layer
-    hurt = new Int32Array(n);      // creature cells look corrupted until this tick
-    kind = null;
-    germCells = [];
-    germToGrow = 0;
-    germWait = 40;
-    germAge = 0;
+    owner = new Int32Array(n);     // which colony the infected cell belongs to
+    colonies = [];
+    byId = new Map();
+    nextId = 1;
+    infected = 0;
+    pressure = pressureGoal = 2;
+    pressureTimer = 150;
     path = [];
     tickNo = 0;
     head = {
       x: cols * rand(0.3, 0.7), y: rows * rand(0.3, 0.7),
-      a: rand(0, Math.PI * 2),
+      a: rand(0, Math.PI * 2), v: STEP,
       k: 0, kGoal: 0, kTimer: 0,
-      r: 6, rGoal: 6, rTimer: 0,
+      r: 6, rGoal: 6, rTimer: 0, R: 6,
       lobe: rand(0, Math.PI * 2),
-      v: STEP, mode: 'wander', timer: 0, style: 'ambush', strike: 15, weave: 0, side: 1, orbit: 18,
+      mode: 'idle', timer: 0, prey: null, plan: null,
+      // inner state that drifts on its own and colours everything it does
+      arousal: 0.6, arousalGoal: 0.6, restless: 0.5, restlessGoal: 0.5, moodTimer: 0,
+      waypoint: null, wayPull: 0,
+      fullness: 0,      // rises as it eats; makes it fat and lazy for a while
+      anger: 0,         // rises when bites bounce off armour
+      heat: 0,          // anger plus how much of the grid is infected
+      memory: [],       // where it last fed
     };
   }
 
@@ -106,10 +136,228 @@
     draw();
   }
 
+  // ---------------------------------------------------------------- infection
+
+  // Every colony gets its own nature. The traits are independent sliders, so
+  // "a runner" or "a fighter" is never chosen: a colony just happens to be
+  // timid, or armoured, or spiteful, or hungry for space, in any mixture.
+  function rollColony() {
+    const budget = 20 * Math.pow(area * 0.55 / 20, skew(2.4));
+    const spite = skew(2.2);
+    const nerve = skew(2.4);
+    const greed = budget / (area * 0.55);
+    const pool = GLYPH_POOL.split('').sort(() => Math.random() - 0.5);
+    const c = {
+      id: nextId++, cells: [], count: 0, age: 0, acc: 0, blocked: 0,
+      budget, energy: budget,            // cells it can ever grow; it can't win, it runs dry
+      growth: (0.4 + 4.6 * skew(1.6)) * (1 + 4 * greed),   // cells per tick
+      armour: skew(2.2),                 // chance of extra layers on each cell
+      spite, fury: spite * 4,            // how readily, and how often, it hits back
+      nerve, stamina: 1,                 // how readily it backs away, until it tires
+      tips: Math.random(),               // 0 grows as a lump, 1 grows as tendrils
+      lure: rand(-1, 1),                 // grows toward (+) or away from (-) the creature
+      drive: skew(2), heading: rand(0, Math.PI * 2),   // creeps in one direction
+      noticed: false, near: Infinity, nearest: 0, cx: 0, cy: 0,
+      x0: 0, x1: 0, y0: 0, y1: 0,
+    };
+    // its look follows from its nature, so you can read it before it acts
+    c.look = {
+      slot: Math.max(1, Math.round(10 - 8 * nerve + rand(-1, 1))),    // jumpy ones flicker fast
+      red: clamp(0.3 + 0.5 * greed + 0.3 * (c.growth / 8) + rand(-0.12, 0.12), 0.15, 0.95),
+      white: 0.1 + 0.7 * spite,                                       // spiteful ones spark white
+      tears: 0.15 + 0.85 * spite,
+      glyphs: pool.slice(0, 2 + Math.floor(rand(0, 8))).join(''),
+    };
+    return c;
+  }
+
+  function addCell(c, x, y, hp) {
+    if (x < 0 || y < 0 || x >= cols || y >= rows) return -1;
+    const i = y * cols + x;
+    if (germ[i]) return -1;
+    germ[i] = hp;
+    germHit[i] = -1e9;
+    owner[i] = c.id;
+    c.cells.push(i);
+    c.count++;
+    infected++;
+    return i;
+  }
+
+  function removeCell(c, i) {
+    germ[i] = 0;
+    c.count--;
+    infected--;
+  }
+
+  const alive = (c, i) => germ[i] > 0 && owner[i] === c.id;
+
+  // a living cell of the colony; `tips` leans the pick toward its newest growth
+  function pickCell(c, tips) {
+    const n = c.cells.length;
+    for (let t = 0; t < 4; t++) {
+      const idx = Math.random() < tips
+        ? n - 1 - Math.floor(Math.random() * Math.min(n, 6 + n * 0.1))
+        : Math.floor(Math.random() * n);
+      const i = c.cells[idx];
+      if (alive(c, i)) return i;
+    }
+    return -1;
+  }
+
+  // an empty cell next to the colony, or -1
+  function pickFrontier(c, tips) {
+    const from = pickCell(c, tips);
+    if (from < 0) return -1;
+    const d = Math.floor(Math.random() * 4);
+    const x = from % cols + [1, -1, 0, 0][d], y = Math.floor(from / cols) + [0, 0, 1, -1][d];
+    if (x < 0 || y < 0 || x >= cols || y >= rows) return -1;
+    const i = y * cols + x;
+    return germ[i] ? -1 : i;
+  }
+
+  // One rule grows every colony: look at a few empty neighbours and take the
+  // one this colony likes best. What it likes is down to its traits.
+  function growOne(c) {
+    let best = -1, bestScore = -Infinity;
+    for (let k = 0; k < 3; k++) {
+      const i = pickFrontier(c, c.tips);
+      if (i < 0) continue;
+      const x = i % cols + 0.5, y = Math.floor(i / cols) + 0.5;
+      const toHead = Math.hypot(x - head.x, y - head.y);
+      const along = Math.cos(c.heading) * (x - c.cx) + Math.sin(c.heading) * (y - c.cy);
+      const score = -c.lure * toHead / 30 + c.drive * along / 10 + Math.random();
+      if (score > bestScore) { bestScore = score; best = i; }
+    }
+    if (best < 0) return;
+    const hp = 1 + (Math.random() < c.armour) + (Math.random() < c.armour * c.armour);
+    addCell(c, best % cols, Math.floor(best / cols), hp);
+    c.energy--;
+  }
+
+  // Backing away is the same for any shape: give up the cells nearest the
+  // creature and regrow them on the far side.
+  function retreat(c) {
+    const hunted = head.prey === c && head.mode !== 'idle';
+    if (c.near > (hunted ? 34 : 12)) return;
+    if (Math.random() > c.nerve * c.stamina) return;
+    const moves = Math.ceil(Math.sqrt(c.count) * 0.6);
+    for (let m = 0; m < moves; m++) {
+      let lose = -1, loseD = Infinity, gain = -1, gainD = -Infinity;
+      for (let k = 0; k < 6; k++) {
+        const i = pickCell(c, 0);
+        if (i >= 0) {
+          const d = Math.hypot(i % cols + 0.5 - head.x, Math.floor(i / cols) + 0.5 - head.y);
+          if (d < loseD) { loseD = d; lose = i; }
+        }
+        const j = pickFrontier(c, 0);
+        if (j >= 0) {
+          const d = Math.hypot(j % cols + 0.5 - head.x, Math.floor(j / cols) + 0.5 - head.y);
+          if (d > gainD) { gainD = d; gain = j; }
+        }
+      }
+      if (lose < 0 || gain < 0 || gainD <= loseD) continue;
+      const hp = germ[lose], hit = germHit[lose];
+      removeCell(c, lose);
+      germHit[addCell(c, gain % cols, Math.floor(gain / cols), hp)] = hit;
+    }
+    c.stamina *= 0.994;   // it runs out of breath
+  }
+
+  // The bite bounced off armour: the head is thrown back, part of its body
+  // glitches, and the colony lashes a spike out at it. How hard depends on
+  // how spiteful this colony is, and it can only do it so many times.
+  function retaliate(c) {
+    const h = head, s = c.spite;
+    c.fury--;
+    h.anger += 0.25;
+    h.mode = 'recoil';
+    h.timer = 12 + 20 * s;
+    h.v = -STEP * (0.8 + 1.4 * s);
+
+    const reach = Math.ceil(h.R) + 3;
+    for (let y = Math.max(0, Math.floor(h.y) - reach); y <= Math.min(rows - 1, Math.floor(h.y) + reach); y++) {
+      for (let x = Math.max(0, Math.floor(h.x) - reach); x <= Math.min(cols - 1, Math.floor(h.x) + reach); x++) {
+        const i = y * cols + x;
+        if (life[i] > 0 && Math.random() < 0.15 + 0.4 * s) hurt[i] = tickNo + rand(15, 30 + 40 * s);
+      }
+    }
+
+    const fx = c.nearest % cols, fy = Math.floor(c.nearest / cols);
+    const a = Math.atan2(h.y - fy, h.x - fx);
+    for (let n = 1; n <= 3 + 8 * s; n++) addCell(c, Math.round(fx + Math.cos(a) * n), Math.round(fy + Math.sin(a) * n), 1);
+  }
+
+  // where the colony is, and its closest cell to the head
+  function survey(c) {
+    let sx = 0, sy = 0, near = Infinity, nearest = 0;
+    let x0 = cols, x1 = 0, y0 = rows, y1 = 0;
+    for (const i of c.cells) {
+      if (!alive(c, i)) continue;
+      const x = i % cols, y = Math.floor(i / cols);
+      sx += x; sy += y;
+      if (x < x0) x0 = x; if (x > x1) x1 = x;
+      if (y < y0) y0 = y; if (y > y1) y1 = y;
+      const d = Math.hypot(x + 0.5 - head.x, y + 0.5 - head.y);
+      if (d < near) { near = d; nearest = i; }
+    }
+    c.cx = sx / c.count + 0.5; c.cy = sy / c.count + 0.5;
+    c.near = near; c.nearest = nearest;
+    c.x0 = x0; c.x1 = x1; c.y0 = y0; c.y1 = y1;
+  }
+
+  // Outbreaks follow a pressure that rises and falls on its own, so they come
+  // in flurries and lulls, and sometimes several are alive at once.
+  function maybeSpawn() {
+    if (--pressureTimer <= 0) {
+      pressureGoal = 0.15 + 3.6 * skew(2.5);
+      pressureTimer = rand(200, 700);
+    }
+    pressure += (pressureGoal - pressure) * 0.01;
+    if (colonies.length >= MAX_COLONIES) return;
+    const room = Math.max(0, 1 - 3 * infected / area);
+    if (Math.random() > 0.0022 * pressure * room) return;
+
+    let x, y, tries = 0;
+    do {
+      x = Math.floor(rand(6, cols - 6));
+      y = Math.floor(rand(6, rows - 6));
+    } while ((germ[y * cols + x] || Math.hypot(x - head.x, y - head.y) < 25) && ++tries < 30);
+    if (germ[y * cols + x]) return;
+    const c = rollColony();
+    colonies.push(c);
+    byId.set(c.id, c);
+    addCell(c, x, y, 1 + (Math.random() < c.armour));
+    c.energy--;
+    survey(c);
+  }
+
+  function updateColonies() {
+    maybeSpawn();
+    for (const c of colonies) {
+      if (c.count <= 0) continue;
+      c.age++;
+      if (c.cells.length > c.count * 1.5 + 24) c.cells = c.cells.filter(i => alive(c, i));
+      survey(c);
+      if (c.energy > 0) {
+        c.acc += c.growth;
+        while (c.acc >= 1 && c.energy > 0) { c.acc--; growOne(c); }
+      }
+      if (c.count > 1) retreat(c);
+    }
+    for (const c of colonies) {
+      if (c.count > 0) continue;
+      head.memory.push({ x: c.cx, y: c.cy });
+      if (head.memory.length > 5) head.memory.shift();
+      byId.delete(c.id);
+    }
+    colonies = colonies.filter(c => c.count > 0);
+  }
+
+  // ----------------------------------------------------------------- creature
+
   function turnToward(angle, rate) {
-    let d = angle - head.a;
-    d = Math.atan2(Math.sin(d), Math.cos(d));
-    head.a += Math.max(-rate, Math.min(rate, d));
+    head.a += clamp(angleDiff(angle, head.a), -rate, rate);
   }
 
   // Free space around a point: distance to the nearest wall or to the
@@ -131,166 +379,236 @@
       clearance(head.x + cx * LOOK / 2, head.y + cy * LOOK / 2));
   }
 
-  // Where the prey is: the middle of the patch, or the nearest scrap once
-  // only a few cells are left. `near` is the distance to the closest cell.
-  function findPrey() {
-    if (!germCells.length) return null;
-    let sx = 0, sy = 0, best = 0, near = Infinity;
-    for (const i of germCells) {
-      const x = i % cols + 0.5, y = Math.floor(i / cols) + 0.5;
-      sx += x; sy += y;
-      const d = Math.hypot(x - head.x, y - head.y);
-      if (d < near) { near = d; best = i; }
-    }
-    const n = germCells.length;
-    return n >= 8
-      ? { x: sx / n, y: sy / n, near }
-      : { x: best % cols + 0.5, y: Math.floor(best / cols) + 0.5, near };
-  }
-
-  const STYLES = ['ambush', 'bites', 'circle', 'engulf'];
-
-  function enter(mode, ticks = 0) {
-    const h = head;
-    h.mode = mode;
-    h.timer = ticks;
-    if (mode === 'alert') {
-      h.style = STYLES[Math.floor(Math.random() * STYLES.length)];
-    } else if (mode === 'stalk') {
-      // how close it creeps before striking
-      h.strike = h.style === 'bites' ? rand(16, 22) : rand(13, 18);
-      h.weave = rand(0, Math.PI * 2);
-    } else if (mode === 'circle') {
-      h.side = Math.random() < 0.5 ? 1 : -1;
-      h.orbit = 18;
-    }
-  }
-
-  function wanderSteer() {
+  // steer clear of walls and its own trail; returns false if the way is open
+  function avoid() {
     const h = head;
     const ahead = probe(0), left = probe(-0.8), right = probe(0.8);
-    if (ahead < 3 || Math.min(left, right) < 1) {
-      // something in the way: swing to whichever side is more open
-      h.a += left > right ? -MAX_TURN : MAX_TURN;
-      h.k = 0;
-      h.kTimer = 0;
-    } else {
-      // curvature drifts toward a goal that changes now and then
-      if (--h.kTimer <= 0) {
-        h.kGoal = Math.random() < 0.2 ? rand(-MAX_TURN, MAX_TURN) : rand(-0.03, 0.03);
-        h.kTimer = rand(30, 110);
+    if (ahead >= 3 && Math.min(left, right) >= 1) return false;
+    h.a += left > right ? -MAX_TURN : MAX_TURN;
+    h.k = 0;
+    h.kTimer = 0;
+    return true;
+  }
+
+  function meander(scale) {
+    const h = head;
+    if (--h.kTimer <= 0) {
+      h.kGoal = (Math.random() < 0.2 ? rand(-MAX_TURN, MAX_TURN) : rand(-0.03, 0.03)) * scale;
+      h.kTimer = rand(30, 110);
+    }
+    h.k += (h.kGoal - h.k) * 0.06;
+    h.a += h.k;
+  }
+
+  // With nothing to hunt it is never just "wandering". Its arousal and
+  // restlessness drift, and it keeps picking somewhere it feels like going,
+  // so it rests, breathes, dawdles, patrols the edges, twitches, or goes
+  // back to nose around where it last fed, in whatever mix the moment gives.
+  function idle() {
+    const h = head;
+    if (--h.moodTimer <= 0) {
+      h.moodTimer = rand(80, 300);
+      h.arousalGoal = clamp(rand(-0.2, 1.1) - 0.5 * h.fullness, 0, 1);
+      h.restlessGoal = Math.random();
+      h.wayPull = rand(0.3, 1);
+      const pick = Math.random();
+      if (pick < 0.35) {
+        h.waypoint = null;
+      } else if (pick < 0.6 && h.memory.length) {
+        const m = h.memory[Math.floor(Math.random() * h.memory.length)];
+        h.waypoint = { x: m.x, y: m.y };
+      } else {
+        // anywhere, with a lean toward the edges
+        const hug = Math.random() < 0.4;
+        h.waypoint = {
+          x: hug && Math.random() < 0.5 ? (Math.random() < 0.5 ? 9 : cols - 9) : rand(9, cols - 9),
+          y: hug ? (Math.random() < 0.5 ? 9 : rows - 9) : rand(9, rows - 9),
+        };
       }
-      h.k += (h.kGoal - h.k) * 0.06;
-      h.a += h.k;
+    }
+    h.arousal += (h.arousalGoal - h.arousal) * 0.02;
+    h.restless += (h.restlessGoal - h.restless) * 0.02;
+
+    if (!avoid()) {
+      if (h.waypoint) {
+        const d = Math.hypot(h.waypoint.x - h.x, h.waypoint.y - h.y);
+        if (d < 6) {
+          // got there: nose about for a bit
+          h.waypoint = null;
+          h.arousalGoal *= 0.4;
+          h.restlessGoal = 1;
+        } else {
+          turnToward(Math.atan2(h.waypoint.y - h.y, h.waypoint.x - h.x), MAX_TURN * h.wayPull);
+        }
+      }
+      meander(0.4 + 1.6 * h.restless);
+    }
+
+    // a sudden start
+    if (Math.random() < 0.004 * (0.3 + h.restless)) {
+      h.a += rand(-1.2, 1.2);
+      h.r *= rand(0.7, 1.3);
+      h.v = STEP * rand(1, 2);
+    }
+
+    if (h.arousal < 0.25) {
+      // resting: slow breathing
+      h.rGoal = 6 + 3 * h.fullness + 1.6 * Math.sin(tickNo * 0.05);
+    } else if (--h.rTimer <= 0) {
+      h.rGoal = rand(3.5, 10) + 3 * h.fullness;
+      h.rTimer = rand(14, 45);
+    }
+    return STEP * (0.08 + 1.15 * h.arousal);
+  }
+
+  // Every approach is a new plan made of independent choices. A lunge from
+  // ambush, a string of quick bites, a tightening spiral or a slow engulfing
+  // are just regions of this space, with everything in between.
+  function makePlan(c) {
+    const h = head, hot = Math.min(1, h.heat);
+    const strikeDist = rand(3, 22);
+    return {
+      orbit: skew(1.8),                         // 0 comes straight in, 1 circles
+      side: Math.random() < 0.5 ? 1 : -1,
+      weave: rand(0, 0.9), weaveRate: rand(0.03, 0.1), phase: rand(0, 6.3),
+      pace: rand(0.3, 1.3) * (1 + hot),         // approach speed
+      strikeDist,                               // how close before it commits
+      windup: rand(6, 34) / (1 + 2 * hot),      // how long it coils
+      tense: rand(2.5, 4.5),                    // how small it draws itself
+      burst: clamp(strikeDist / 7 * rand(0.5, 1.4), 0.08, 3.3) * (1 + 0.5 * hot),
+      gape: clamp(Math.sqrt(c.count) * rand(0.5, 1.1) + rand(2, 5), 4, 13),
+      over: rand(4, 14),                        // how far past it carries
+      rest: rand(10, 55) / (1 + 2 * hot),
+      patience: rand(80, 260),
+    };
+  }
+
+  function choosePrey(known) {
+    let best = null, bestScore = -Infinity;
+    for (const c of known) {
+      const score = -c.near * rand(0.5, 1.5) + Math.sqrt(c.count) * rand(0, 3);
+      if (score > bestScore) { bestScore = score; best = c; }
+    }
+    return best;
+  }
+
+  function engage(known, startled) {
+    const h = head;
+    h.prey = choosePrey(known);
+    h.plan = makePlan(h.prey);
+    if (startled) {
+      h.mode = 'alert';
+      h.timer = rand(25, 45) * (1 - 0.7 * Math.min(1, h.heat));
+    } else {
+      h.mode = 'approach';
+      h.timer = h.plan.patience;
     }
   }
 
-  // The head behaves like a predator rather than a homing missile. It
-  // wanders unaware until the prey's scent reaches it, stops to look
-  // (alert), then picks one of four ways to take it:
-  //   ambush - stalk close, coil, one big lunge with the front wide open
-  //   bites  - quick narrow strikes from further out, again and again
-  //   circle - spiral around it, tightening the ring, then close over it
-  //   engulf - ooze up slowly, settle on top and swell until it's gone
-  // After a kill it sits and throbs for a moment (digest).
   function moveHead() {
     const h = head;
-    const prey = findPrey();
-    const dist = prey ? Math.hypot(prey.x - h.x, prey.y - h.y) : 0;
-    const bearing = prey ? Math.atan2(prey.y - h.y, prey.x - h.x) : h.a;
-    const bites = h.style === 'bites';
-    let speed = STEP, swell = 0.09;
 
-    if (!prey && h.mode !== 'wander' && h.mode !== 'lunge' && h.mode !== 'recover' && h.mode !== 'digest') {
-      enter('digest', rand(45, 70));
+    h.anger *= 0.997;
+    h.fullness *= 0.9985;
+    h.heat = clamp(4 * infected / area + h.anger, 0, 1.5);
+    const hot = Math.min(1, h.heat);
+
+    // a colony's scent spreads the longer it's been there and the bigger it is
+    for (const c of colonies) {
+      if (!c.noticed && c.near < 18 + c.age * 0.15 + Math.sqrt(c.count)) c.noticed = true;
+    }
+    const known = colonies.filter(c => c.noticed && c.count > 0);
+    if (h.prey && h.prey.count <= 0) h.prey = null;
+
+    if (!h.prey && (h.mode === 'alert' || h.mode === 'approach' || h.mode === 'windup')) {
+      if (known.length) engage(known, false);
+      else { h.mode = 'digest'; h.timer = rand(45, 70); }
     }
 
+    // aim a little way inside the nearest edge of the prey
+    let dist = 0, bearing = h.a;
+    if (h.prey) {
+      const c = h.prey;
+      const nx = c.nearest % cols + 0.5, ny = Math.floor(c.nearest / cols) + 0.5;
+      const t = Math.min(1, 6 / (Math.hypot(c.cx - nx, c.cy - ny) || 1));
+      const ax = nx + (c.cx - nx) * t, ay = ny + (c.cy - ny) * t;
+      dist = Math.hypot(ax - h.x, ay - h.y);
+      bearing = Math.atan2(ay - h.y, ax - h.x);
+    }
+
+    const p = h.plan;
+    let speed = STEP, swell = 0.09;
+
     if (target) {
-      enter('wander');
+      h.mode = 'idle';
+      h.prey = null;
       turnToward(Math.atan2(target.y - h.y, target.x - h.x), MAX_TURN);
-    } else if (h.mode === 'wander') {
-      // the scent spreads the longer the infection has been there
-      if (prey && prey.near < 22 + germAge * 0.15) enter('alert', rand(25, 45));
-      else wanderSteer();
+    } else if (h.mode === 'idle') {
+      if (known.length) engage(known, true);
+      else speed = idle();
     } else if (h.mode === 'alert') {
+      // stops and turns to look
       turnToward(bearing, 0.05);
       speed = STEP * 0.12;
       h.rGoal = 4.5;
-      if (--h.timer <= 0) {
-        if (h.style === 'circle') enter('circle', 420);
-        else if (h.style === 'engulf') enter('ooze', 400);
-        else enter('stalk', 260);
-      }
-    } else if (h.mode === 'stalk') {
-      turnToward(bearing + 0.7 * Math.sin(tickNo * 0.06 + h.weave), 0.08);
-      speed = STEP * (bites ? 0.7 : 0.45);
-      h.rGoal = 4 + 0.6 * Math.sin(tickNo * 0.15);
-      const off = Math.abs(Math.atan2(Math.sin(bearing - h.a), Math.cos(bearing - h.a)));
-      if ((dist < h.strike && off < 0.45) || dist < 7 || --h.timer <= 0) {
-        enter('coil', bites ? rand(6, 12) : rand(18, 32));
-      }
-    } else if (h.mode === 'coil') {
-      turnToward(bearing, 0.15);
+      if (--h.timer <= 0) { h.mode = 'approach'; h.timer = p.patience; }
+    } else if (h.mode === 'approach') {
+      const swing = p.side * p.orbit * 1.45 * clamp(dist / (p.strikeDist + 4), 0.3, 1);
+      turnToward(bearing + swing + p.weave * Math.sin(tickNo * p.weaveRate + p.phase), 0.08 + 0.12 * p.orbit);
+      speed = STEP * p.pace * (1 + p.orbit);   // going round takes longer, so it goes quicker
+      h.rGoal = p.tense + 1 + 0.6 * Math.sin(tickNo * 0.15);
+      if (dist < p.strikeDist || --h.timer <= 0) { h.mode = 'windup'; h.timer = p.windup; }
+    } else if (h.mode === 'windup') {
+      // draws itself in and shivers
+      turnToward(bearing, 0.2);
       speed = STEP * 0.05;
-      h.rGoal = 3;
+      h.rGoal = p.tense * 0.8;
       h.lobe += 0.25;
-      if (--h.timer <= 0) enter('lunge', Math.ceil((dist + (bites ? 13 : 9)) / (STEP * (bites ? 3 : 2.6))));
-    } else if (h.mode === 'lunge') {
-      if (prey) turnToward(bearing, 0.025);
-      speed = STEP * (bites ? 3 : 2.6);
-      h.rGoal = bites ? 5 : 10.5;
-      swell = 0.3;
       if (--h.timer <= 0) {
-        if (!prey) enter('digest', rand(45, 70));
-        else enter('recover', bites ? rand(12, 22) : rand(30, 55));
+        h.mode = 'strike';
+        const travel = (dist + p.over) / (STEP * p.burst);
+        // a slow strike is really settling on top of it, so it gets time to feed
+        h.timer = Math.min(170, travel) + (p.burst < 0.7 ? rand(60, 120) : 0);
       }
-    } else if (h.mode === 'circle') {
-      // ride a ring around the prey and let the ring shrink
-      h.orbit -= 0.09;
-      const inward = Math.max(-0.6, Math.min(1.2, (dist - h.orbit) * 0.25));
-      turnToward(bearing + h.side * (Math.PI / 2 - inward), 0.2);
-      speed = STEP * 1.3;
-      h.rGoal = 4.2;
-      if (h.orbit < 4 || dist < 4 || --h.timer <= 0) enter('feed', 150);
-    } else if (h.mode === 'ooze') {
-      turnToward(bearing, 0.1);
-      speed = STEP * 0.35;
-      h.rGoal = 6 + 0.8 * Math.sin(tickNo * 0.1);
-      if (dist < 5 || --h.timer <= 0) enter('feed', 150);
-    } else if (h.mode === 'feed') {
-      // sit on it and swell
-      turnToward(bearing, 0.1);
-      speed = dist > 3 ? STEP * 0.3 : STEP * 0.04;
-      h.rGoal = 12.5;
-      swell = 0.045;
-      if (--h.timer <= 0) enter('recover', rand(20, 40));
+    } else if (h.mode === 'strike') {
+      if (h.prey) turnToward(bearing, 0.1 / (1 + 1.5 * p.burst));
+      speed = STEP * p.burst;
+      if (p.burst < 0.7 && dist < 3) speed = STEP * 0.04;
+      h.rGoal = p.gape;
+      swell = 0.045 + 0.1 * p.burst;
+      if (--h.timer <= 0 || (!h.prey && p.burst < 0.7)) {
+        if (known.length) { h.mode = 'recover'; h.timer = p.rest; }
+        else { h.mode = 'digest'; h.timer = rand(45, 70); }
+      }
     } else if (h.mode === 'recoil') {
-      // thrown back off a fighter: flinch small, then come round again
+      // thrown back off armour: flinch small, then come round again
       speed = -STEP * 0.4;
       h.rGoal = 3;
       swell = 0.3;
       h.lobe += 0.3;
-      if (--h.timer <= 0) enter('recover', rand(15, 30));
+      if (--h.timer <= 0) { h.mode = 'recover'; h.timer = rand(8, 25) / (1 + 2 * hot); }
     } else if (h.mode === 'digest') {
+      // sits and throbs
+      if (known.length) engage(known, true);
       speed = STEP * 0.08;
-      h.rGoal = 7 + 2.5 * Math.sin(h.timer * 0.35);
+      h.rGoal = 7 + 3 * h.fullness + 2.5 * Math.sin(h.timer * 0.35);
       swell = 0.2;
       h.lobe += 0.08;
-      if (--h.timer <= 0) enter('wander');
+      if (--h.timer <= 0 && h.mode === 'digest') { h.mode = 'idle'; h.moodTimer = 0; }
     } else {
-      wanderSteer();
-      speed = STEP * 0.5;
-      if (--h.timer <= 0) prey ? enter('stalk', bites ? 90 : 200) : enter('wander');
+      // recover: carries on past, loose, before deciding what next
+      if (!avoid()) meander(1);
+      speed = STEP * 0.5 * (1 + hot);
+      if (--h.rTimer <= 0) { h.rGoal = rand(3.5, 10); h.rTimer = rand(14, 45); }
+      if (--h.timer <= 0) {
+        if (known.length) engage(known, false);
+        else { h.mode = 'idle'; h.moodTimer = 0; }
+      }
     }
 
-    h.v += (speed - h.v) * (h.mode === 'lunge' ? 0.4 : 0.12);
-
-    // left to itself the head keeps swelling and shrinking; its outline slowly turns
-    if ((h.mode === 'wander' || h.mode === 'recover') && --h.rTimer <= 0) {
-      h.rGoal = rand(3.5, 10);
-      h.rTimer = rand(14, 45);
-    }
+    h.v += (speed - h.v) * (h.mode === 'strike' ? 0.4 : 0.12);
     h.r += (h.rGoal - h.r) * swell;
+    h.R = h.r * (1 + 0.6 * hot);   // the more infection there is, the bigger it gets
     h.lobe += 0.05;
 
     h.x += Math.cos(h.a) * h.v;
@@ -301,23 +619,27 @@
 
   // The head is a lumpy disc. A cell under its centre gets a full life;
   // cells toward the rim get much less, so the trail thins out fast.
+  // Infected cells under it lose a layer of armour, or are eaten.
   function stampHead() {
     const h = head;
-    const reach = h.r * 1.2 + 1;
+    const gap = HIT_GAP * (1 - 0.7 * Math.min(1, h.heat));
+    const reach = h.R * 1.2 + 1;
     const x0 = Math.max(0, Math.floor(h.x - reach)), x1 = Math.min(cols - 1, Math.floor(h.x + reach));
     const y0 = Math.max(0, Math.floor(h.y - reach)), y1 = Math.min(rows - 1, Math.floor(h.y + reach));
-    let ate = 0, blocked = 0;
+    let ate = 0;
     for (let y = y0; y <= y1; y++) {
       for (let x = x0; x <= x1; x++) {
         const i = y * cols + x;
         const dx = x + 0.5 - h.x, dy = y + 0.5 - h.y;
-        const rim = h.r * (1 + 0.16 * Math.sin(3 * Math.atan2(dy, dx) + h.lobe));
+        const rim = h.R * (1 + 0.16 * Math.sin(3 * Math.atan2(dy, dx) + h.lobe));
         const u = (Math.hypot(dx, dy) - edge[i]) / rim;
         if (u >= 1) continue;
-        if (germ[i] && u < 0.85 && tickNo - germHit[i] > HIT_GAP) {
+        if (germ[i] && u < 0.85 && tickNo - germHit[i] > gap) {
           // one layer per pass: armoured cells take several attacks
           germHit[i] = tickNo;
-          if (--germ[i] === 0) ate++; else blocked++;
+          const c = byId.get(owner[i]);
+          if (germ[i] === 1) { removeCell(c, i); ate++; }
+          else { germ[i]--; c.blocked++; }
         }
         const inward = 1 - Math.max(u, 0);
         const v = TAIL * inward * inward * vigor[i] + 5;
@@ -328,184 +650,16 @@
       }
     }
     if (ate) {
-      // swallowing makes the head swell
-      h.r = Math.min(13, h.r + 0.05 * ate);
-      germCells = germCells.filter(i => germ[i]);
-      if (!germCells.length) { germToGrow = 0; germWait = nextWait(); }
+      // swallowing makes the head swell, and fills it up
+      h.r = Math.min(14, h.r + 0.05 * ate);
+      h.fullness = Math.min(1, h.fullness + 0.004 * ate);
     }
-    if (blocked >= 3 && germCells.length && kind.fury > 0 && h.mode !== 'recoil') {
-      kind.fury--;
-      fightBack();
-    }
-  }
-
-  // Infections don't keep a schedule: sometimes one follows straight after
-  // another, sometimes the grid stays clean for a long while.
-  function nextWait() {
-    const r = Math.random();
-    if (r < 0.25) return rand(15, 70);
-    if (r < 0.75) return rand(120, 340);
-    return rand(420, 850);
-  }
-
-  // Four kinds. None of them can win, but they don't all go quietly.
-  //   plain   - sits there
-  //   runner  - backs away once it's being hunted, until it tires
-  //   fighter - armoured, and hits back when bitten
-  //   brute   - big and heavily armoured; some of them fight too
-  function rollKind() {
-    const r = Math.random();
-    if (r < 0.36) return { name: 'plain', size: rand(30, 85), hp: 1, fury: 0 };
-    if (r < 0.60) return { name: 'runner', size: rand(25, 55), hp: 1, fury: 0, runner: true, steps: 0, wait: 0 };
-    if (r < 0.82) return { name: 'fighter', size: rand(45, 90), hp: 2, fury: 2 };
-    return { name: 'brute', size: rand(110, 170), hp: 3, fury: Math.random() < 0.4 ? 3 : 0 };
-  }
-
-  // An infection appears somewhere away from the head and spreads cell by
-  // cell until it reaches its full size or gets eaten.
-  function spawnGerm() {
-    let x, y, tries = 0;
-    do {
-      x = Math.floor(rand(8, cols - 8));
-      y = Math.floor(rand(8, rows - 8));
-    } while (Math.hypot(x - head.x, y - head.y) < 25 && ++tries < 30);
-    const i = y * cols + x;
-    kind = rollKind();
-    germ[i] = kind.hp;
-    germCells = [i];
-    germToGrow = Math.floor(kind.size);
-    germAge = 0;
-  }
-
-  function addGermCell(x, y, hp) {
-    if (x < 1 || y < 1 || x >= cols - 1 || y >= rows - 1) return false;
-    const i = y * cols + x;
-    if (germ[i]) return false;
-    germ[i] = hp;
-    germHit[i] = -1e9;
-    germCells.push(i);
-    return true;
-  }
-
-  // slide the whole patch one cell; refuses if any of it would leave the grid
-  function shiftGerm(dx, dy) {
-    if (!dx && !dy) return false;
-    for (const i of germCells) {
-      const x = i % cols + dx, y = Math.floor(i / cols) + dy;
-      if (x < 2 || y < 2 || x >= cols - 2 || y >= rows - 2) return false;
-    }
-    const moved = germCells.map(i => [i + dx + dy * cols, germ[i], germHit[i]]);
-    for (const i of germCells) germ[i] = 0;
-    for (const [i, hp, hit] of moved) { germ[i] = hp; germHit[i] = hit; }
-    germCells = moved.map(m => m[0]);
-    return true;
-  }
-
-  function flee() {
-    const h = head;
-    let cx = 0, cy = 0;
-    for (const i of germCells) { cx += i % cols + 0.5; cy += Math.floor(i / cols) + 0.5; }
-    cx /= germCells.length; cy /= germCells.length;
-    const d = Math.hypot(cx - h.x, cy - h.y);
-    const hunted = h.mode !== 'wander' && h.mode !== 'digest';
-    if (d > (hunted ? 32 : 13)) return;
-    if (--kind.wait > 0) return;
-    // quick at first, then it runs out of breath
-    kind.wait = kind.steps < 60 ? 3 : kind.steps < 110 ? 5 : 9;
-    kind.steps++;
-    const away = Math.atan2(cy - h.y, cx - h.x) + rand(-0.5, 0.5);
-    const dx = Math.round(Math.cos(away)), dy = Math.round(Math.sin(away));
-    shiftGerm(dx, dy) || shiftGerm(dx, 0) || shiftGerm(0, dy) || shiftGerm(-dy, dx) || shiftGerm(dy, -dx);
-  }
-
-  // The bite bounces off armour: the head is thrown back, part of its body
-  // glitches, and the infection lashes a spike out at it.
-  function fightBack() {
-    const h = head;
-    enter('recoil', rand(18, 28));
-    h.v = -STEP * 1.6;
-
-    const reach = Math.ceil(h.r) + 3;
-    for (let y = Math.max(0, Math.floor(h.y) - reach); y <= Math.min(rows - 1, Math.floor(h.y) + reach); y++) {
-      for (let x = Math.max(0, Math.floor(h.x) - reach); x <= Math.min(cols - 1, Math.floor(h.x) + reach); x++) {
-        const i = y * cols + x;
-        if (life[i] > 0 && Math.random() < 0.4) hurt[i] = tickNo + rand(20, 50);
+    for (const c of colonies) {
+      if (c.blocked >= 3 && c.count > 0 && c.fury >= 1 && h.mode !== 'recoil' && Math.random() < 0.35 + 0.65 * c.spite) {
+        retaliate(c);
       }
-    }
-
-    let from = germCells[0], near = Infinity;
-    for (const i of germCells) {
-      const d = Math.hypot(i % cols + 0.5 - h.x, Math.floor(i / cols) + 0.5 - h.y);
-      if (d < near) { near = d; from = i; }
-    }
-    const fx = from % cols, fy = Math.floor(from / cols);
-    const a = Math.atan2(h.y - fy, h.x - fx);
-    for (let n = 1; n <= 7; n++) addGermCell(Math.round(fx + Math.cos(a) * n), Math.round(fy + Math.sin(a) * n), 1);
-  }
-
-  function updateGerm() {
-    if (!germCells.length) {
-      if (--germWait <= 0) spawnGerm();
-      return;
-    }
-    germAge++;
-    for (let n = 0; n < 3 && germToGrow > 0; n++) {
-      const from = germCells[Math.floor(Math.random() * germCells.length)];
-      const x = from % cols + [1, -1, 0, 0][Math.floor(Math.random() * 4)];
-      const y = Math.floor(from / cols) + [0, 0, 1, -1][Math.floor(Math.random() * 4)];
-      if (addGermCell(x, y, kind.hp)) germToGrow--;
-    }
-    if (kind.runner) flee();
-  }
-
-  // cheap repeatable noise, so the glitch holds still for a few ticks at a time
-  function hash(a, b) {
-    let h = Math.imul(a ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(b + 0x7f4a7c15, 0xc2b2ae35);
-    h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12;
-    return h >>> 0;
-  }
-
-  // indexed by armour layers left: exposed cells are red and black,
-  // armoured ones go almost solid black
-  const GERM_FILL = [null,
-    ['#0a0a0a', '#0a0a0a', '#0a0a0a', '#e3122b', '#e3122b', '#7a0613'],
-    ['#0a0a0a', '#0a0a0a', '#0a0a0a', '#0a0a0a', '#7a0613', '#e3122b'],
-    ['#0a0a0a', '#0a0a0a', '#0a0a0a', '#0a0a0a', '#0a0a0a', '#3a0309']];
-  const GERM_INK = [null,
-    ['#e3122b', '#e3122b', '#ffffff', '#0a0a0a', '#0a0a0a', '#ff5a6e'],
-    ['#ffffff', '#e3122b', '#ff5a6e', '#ffffff', '#ffffff', '#0a0a0a'],
-    ['#ffffff', '#ffffff', '#e3122b', '#ffffff', '#ff5a6e', '#ffffff']];
-  const GERM_GLYPHS = '0123456789#X';
-
-  function drawGerm() {
-    if (!germCells.length) return;
-    const slot = Math.floor(tickNo / 4);
-    let x0 = cols, x1 = 0, y0 = rows, y1 = 0;
-    for (const i of germCells) {
-      const x = i % cols, y = Math.floor(i / cols);
-      if (x < x0) x0 = x; if (x > x1) x1 = x;
-      if (y < y0) y0 = y; if (y > y1) y1 = y;
-      ctx.fillStyle = GERM_FILL[germ[i]][hash(i, slot) % 6];
-      ctx.fillRect(x * px, y * px, px, px);
-    }
-    // torn scanlines sticking out of the sides
-    for (let g = 0; g < 3; g++) {
-      const r = hash(g, slot);
-      if (r % 5 < 2) continue;
-      const y = y0 + (r >>> 3) % (y1 - y0 + 1);
-      const len = 2 + (r >>> 9) % 4;
-      const x = (r >>> 13) % 2 ? x1 + 1 - (r >>> 15) % 2 : x0 - len + (r >>> 15) % 2;
-      ctx.fillStyle = (r >>> 17) % 3 ? '#e3122b' : '#0a0a0a';
-      ctx.fillRect(x * px, y * px + px * 0.2, len * px, px * 0.6);
-    }
-  }
-
-  function drawGermGlyphs() {
-    const slot = Math.floor(tickNo / 4);
-    for (const i of germCells) {
-      const r = hash(i, slot);
-      ctx.fillStyle = GERM_INK[germ[i]][r % 6];
-      ctx.fillText(GERM_GLYPHS[(r >>> 8) % GERM_GLYPHS.length], (i % cols) * px + px / 2 + 0.5, Math.floor(i / cols) * px + px / 2 + 1);
+      h.anger = Math.min(1, h.anger + 0.002 * c.blocked);
+      c.blocked = 0;
     }
   }
 
@@ -514,8 +668,10 @@
     for (let i = 0; i < life.length; i++) if (life[i] > 0) life[i]--;
     moveHead();
     stampHead();
-    updateGerm();
+    updateColonies();
   }
+
+  // ------------------------------------------------------------------ drawing
 
   function band(i) {
     const f = life[i] / born[i] + tint[i];
@@ -524,21 +680,68 @@
     return b;
   }
 
+  // exposed cells are red and black in the colony's own mix; armoured ones
+  // go almost solid black
+  function germFill(c, i, r) {
+    const hp = germ[i];
+    const dark = 1 - c.look.red * (hp === 1 ? 1 : hp === 2 ? 0.35 : 0.08);
+    const f = (r % 1000) / 1000;
+    return f < dark ? BLACK : f < dark + (1 - dark) * 0.8 ? RED : BLOOD;
+  }
+
+  function drawColonies() {
+    for (const c of colonies) {
+      const slot = Math.floor(tickNo / c.look.slot);
+      for (const i of c.cells) {
+        if (!alive(c, i)) continue;
+        ctx.fillStyle = germFill(c, i, hash(i, slot));
+        ctx.fillRect((i % cols) * px, Math.floor(i / cols) * px, px, px);
+      }
+      // torn scanlines sticking out of the sides
+      const tears = Math.ceil(c.look.tears * (1 + Math.sqrt(c.count) / 4));
+      for (let g = 0; g < tears; g++) {
+        const r = hash(g + c.id * 31, slot);
+        if (r % 5 < 2) continue;
+        const y = c.y0 + (r >>> 3) % (c.y1 - c.y0 + 1);
+        const len = 2 + (r >>> 9) % 4;
+        const x = (r >>> 13) % 2 ? c.x1 + 1 - (r >>> 15) % 2 : c.x0 - len + (r >>> 15) % 2;
+        ctx.fillStyle = (r >>> 17) % 3 ? RED : BLACK;
+        ctx.fillRect(x * px, y * px + px * 0.2, len * px, px * 0.6);
+      }
+    }
+  }
+
+  function drawColonyGlyphs() {
+    for (const c of colonies) {
+      const slot = Math.floor(tickNo / c.look.slot);
+      const g = c.look.glyphs;
+      for (const i of c.cells) {
+        if (!alive(c, i)) continue;
+        const r = hash(i, slot);
+        const onBlack = germFill(c, i, r) === BLACK;
+        const spark = ((r >>> 10) % 100) / 100 < c.look.white;
+        ctx.fillStyle = onBlack ? (spark ? '#fff' : RED) : (spark ? PINK : BLACK);
+        ctx.fillText(g[(r >>> 18) % g.length], (i % cols) * px + px / 2 + 0.5, Math.floor(i / cols) * px + px / 2 + 1);
+      }
+    }
+  }
+
   function draw() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, cols * px, rows * px);
 
+    const slot = tickNo >> 2;
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
         const i = y * cols + x;
-        if (life[i] <= 0) continue;
-        ctx.fillStyle = hurt[i] > tickNo ? GERM_FILL[1][hash(i, tickNo >> 2) % 6] : FILL[band(i)];
+        if (life[i] <= 0 || germ[i]) continue;
+        ctx.fillStyle = hurt[i] > tickNo ? (hash(i, slot) % 5 < 3 ? BLACK : RED) : FILL[band(i)];
         ctx.fillRect(x * px, y * px, px, px);
       }
     }
 
-    drawGerm();
+    drawColonies();
 
     ctx.strokeStyle = '#1b2440';
     ctx.lineWidth = 0.5;
@@ -556,12 +759,14 @@
       for (let x = 0; x < cols; x++) {
         const i = y * cols + x;
         if (life[i] <= 0 || germ[i]) continue;
-        ctx.fillStyle = hurt[i] > tickNo ? GERM_INK[1][hash(i, tickNo >> 2) % 6] : INK[band(i)];
+        ctx.fillStyle = hurt[i] > tickNo ? (hash(i, slot) % 5 < 3 ? RED : BLACK) : INK[band(i)];
         ctx.fillText(num[i], x * px + px / 2 + 0.5, y * px + px / 2 + 1);
       }
     }
-    drawGermGlyphs();
+    drawColonyGlyphs();
   }
+
+  // ----------------------------------------------------------------- controls
 
   const speed = document.getElementById('speed');
   let prev = performance.now(), owed = 0;
@@ -603,7 +808,13 @@
   let resizeTimer;
   addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(layout, 150); });
 
-  window.snake = { get head() { return head; }, get germCells() { return germCells; }, get kind() { return kind; } };
+  // for poking at it from the browser console
+  window.snake = {
+    get head() { return head; },
+    get colonies() { return colonies; },
+    get infected() { return infected / area; },
+    tick, draw,
+  };
 
   layout();
   requestAnimationFrame(frame);
