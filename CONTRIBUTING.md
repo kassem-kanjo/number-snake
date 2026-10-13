@@ -21,12 +21,12 @@ Run it before and after, at least twice each, because every run uses a new seed.
 | Field | Healthy range |
 |---|---|
 | `stillAlive` | 0 to 6, with `oldestStillAlive` not growing run to run |
-| `lifeMedian` | 480 to 640 ticks |
-| `life90` | 1200 to 1500 ticks |
-| `idlePct` | 26 to 37 |
+| `lifeMedian` | 400 to 520 ticks |
+| `life90` | 900 to 1200 ticks |
+| `idlePct` | 30 to 40 |
 | `maxInfectedPct` | usually 30 to 55 |
 
-A change is suspect if it moves `lifeMedian` or `life90` by more than about 25%, or pushes `idlePct` below about 22. Record what you measured in `docs/DECISIONS.md`, including for ideas that were dropped.
+A change is suspect if it moves `lifeMedian` or `life90` by more than about 25%, or pushes `idlePct` below about 26. Record what you measured in `docs/DECISIONS.md`, including for ideas that were dropped.
 
 For the calm default (expect far fewer outbreaks, the creature idle around 70 to 75% of the time, and infection under about 10% of the grid):
 

@@ -20,6 +20,7 @@ Play it in your browser at **https://kassem-kanjo.github.io/number-snake/**, or 
 
 ## What you are looking at
 
+- **Teal and green cells** are the warden, a second defender that lives on the grid beside the blue creature (the hunter). It circles an infection colony at a set distance, following its edge, and closes in slowly. Then it coils and settles onto the colony, swelling over it. It is calmer and more deliberate than the hunter, and it never divides.
 - **Blue cells** are the creature's body. A freshly touched cell is blue when the creature is calm and shifts toward bright cyan as it gets worked up. It fades through cyan, violet and mint into dark navy as its life runs out.
 - **The trail** is thickest under the centre of the creature and thins toward its edge. While it is fresh (its first three colours) it is a wall: infection cannot grow into it or back away through it, so a creature that circles an infection pens it in.
 - **The body** stretches out along its heading when it moves fast and sits squat when it is still.
@@ -84,6 +85,14 @@ An infection with enough cells and energy can throw a spore. The child lands 10 
 
 When heat gets high enough, the creature can pinch into several heads, up to a fixed maximum. The heads spring apart and hunt separately. When things calm down, the extra heads wither and disappear. The original head always stays. Two heads after the same infection come round it from opposite sides.
 
+### Two defenders
+
+Each kind of defender is a species: a record of numbers, not a block of code. A species holds its colours, the ranges its attack plans are rolled from, and its temperament. A value of 0 switches a behaviour off. No code checks a species by name, so the hunter and the warden differ only in their numbers.
+
+Attack plans have two circling settings. `standoff` is how many cells away the head keeps from its prey. `circle` is how many ticks it spends going round. When `standoff` is above 0, the head follows the edge of the prey instead of closing straight in. The warden starts at a standoff of 5 to 9 cells and tightens over 200 to 420 ticks until the gap is gone.
+
+The warden's trail lasts longer, so its ring of fresh trail holds while it works. Infection cannot grow or back away through that ring, so a colony is penned in before the warden crushes it.
+
 ## Testing
 
 Run `node bench.js [ticks] [cols] [rows] [outbreak]` from the project folder. It tests the calm default; to test Outbreak mode pass `outbreak` as the fourth argument, after ticks, columns and rows (for example `node bench.js 200000 90 60 outbreak`). The page picks its own cell size, so the grid can come out smaller than asked for large sizes. `node bench.js --check` is the quick pass/fail version that runs on every pull request. It needs only Node, not a browser. The defaults are 200000 ticks (80000 with `--check`) on a 90 by 60 grid. It runs the simulation headless and prints JSON:
@@ -97,9 +106,10 @@ Run `node bench.js [ticks] [cols] [rows] [outbreak]` from the project folder. It
 - `severalAtOncePct`: percent of ticks with more than one infection alive.
 - `maxInfectedPct`: the highest share of the grid that was infected, in percent.
 - `maxGeneration`: the deepest spore generation seen (0 is an original infection).
-- `splitPct`: percent of ticks with more than one head.
+- `eatenShare`: percent of infected cells eaten by each species, by name.
+- `splitPct`: percent of ticks with a split-off head alive. The two permanent defenders do not count.
 - `growthBlockedByTrail`: how many attempts by an infection to grow or back away into the creature's fresh trail were turned away.
-- `maxHeads`: the most heads alive at one time.
+- `maxHeads`: the most heads alive at one time, counting both permanent defenders.
 
 Each benchmark run uses a new random seed, so numbers change from run to run. Compare runs with a large tick count, and expect some variation.
 
