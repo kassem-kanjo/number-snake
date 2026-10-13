@@ -1,14 +1,17 @@
 // Runs the simulation in index.html without a browser and prints what happened.
 //   node bench.js [ticks] [cols] [rows] [ambient]
+//   node bench.js --check        quick pass/fail, used by CI
 // Use it to check a change: every outbreak should still get eaten, and the
 // numbers should not drift far from the last run unless you meant them to.
 const fs = require('fs');
 const path = require('path');
 
-const ticks = +process.argv[2] || 200000;
-const gridCols = +process.argv[3] || 90;
-const gridRows = +process.argv[4] || 60;
-const ambient = process.argv[5] === 'ambient';
+const check = process.argv.includes('--check');
+const args = process.argv.slice(2).filter(a => a !== '--check');
+const ticks = +args[0] || (check ? 80000 : 200000);
+const gridCols = +args[1] || 90;
+const gridRows = +args[2] || 60;
+const ambient = args[3] === 'ambient';
 
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 const script = html.slice(html.indexOf('<script>') + 8, html.lastIndexOf('</script>'));
@@ -33,6 +36,20 @@ new Function(script)();
 const s = global.snake;
 if (ambient) s.setAmbient(true);
 
+// things that must be true at any moment
+const failures = [];
+function audit(t) {
+  const cells = s.colonies.reduce((n, c) => n + c.count, 0);
+  if (cells !== Math.round(s.infected * gridCols * gridRows)) failures.push(`tick ${t}: colony cell counts (${cells}) disagree with the infected total`);
+  for (const c of s.colonies) {
+    if (new Set(c.cells).size !== c.cells.length) failures.push(`tick ${t}: colony ${c.id} lists a cell twice`);
+    if (!(c.energy <= c.budget)) failures.push(`tick ${t}: colony ${c.id} gained energy`);
+  }
+  for (const h of s.heads) {
+    if (![h.x, h.y, h.a, h.R, h.v].every(Number.isFinite)) failures.push(`tick ${t}: a head has a non-number in its state`);
+  }
+}
+
 const seen = new Map(), lives = [], modes = {};
 let maxInfected = 0, several = 0, maxGen = 0, maxHeads = 0, split = 0;
 for (let t = 0; t < ticks; t++) {
@@ -49,6 +66,7 @@ for (let t = 0; t < ticks; t++) {
     if (c.gen > maxGen) maxGen = c.gen;
   }
   for (const [id, born] of seen) if (!ids.has(id)) { lives.push(t - born); seen.delete(id); }
+  if (check && t % 200 === 0) audit(t);
 }
 lives.sort((a, b) => a - b);
 const pct = n => Math.round(100 * n / ticks);
@@ -68,3 +86,14 @@ console.log(JSON.stringify({
   splitPct: pct(split),
   maxHeads,
 }, null, 1));
+
+if (check) {
+  const oldest = Math.max(0, ...[...seen.values()].map(b => ticks - b));
+  if (!lives.length) failures.push('no outbreak was cleared');
+  if (oldest > 12000) failures.push(`an outbreak has survived ${oldest} ticks`);
+  if (failures.length) {
+    console.error('FAILED\n' + [...new Set(failures)].slice(0, 10).join('\n'));
+    process.exit(1);
+  }
+  console.log('ok');
+}

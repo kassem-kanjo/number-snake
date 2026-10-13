@@ -1,0 +1,67 @@
+# Architecture
+
+The whole simulation is one file, `index.html`: markup, styles and a single script. There is no build step and there are no dependencies. `bench.js` runs the same script under Node with a stubbed page.
+
+## Layout of the script
+
+The script is one closure, split by banner comments into these sections, in order:
+
+| Section | What lives there |
+|---|---|
+| Setup (top) | Colours, tuning constants, the seeded random generator, `reset`, `newHead`, `layout` |
+| Infection | Traits, building colonies, growth, retreat, retaliation, spores, spawning, `updateColonies` |
+| Creature | Steering helpers, `idle`, `makePlan`, `engage`, `moveHead`, `stampHead`, `divide`, `manageHeads`, `tick` |
+| Drawing | `draw` and the colony drawing helpers |
+| Controls | The frame loop, buttons, keys, pointer steering, double-click planting |
+| Hover inspector | The panel for colonies and heads, then Record, Ambient and resize handling |
+
+## Data model
+
+The grid is `cols` by `rows`. Every per-cell value is a typed array indexed by `y * cols + x`.
+
+**Creature cells**
+
+- `life`: ticks left. `born`: the life the cell was last topped up to. Colour comes from `life / born`; the printed number comes from `life / FULL`.
+- `edge`, `vigor`, `tint`: fixed per-cell noise for a ragged outline, uneven lifetimes and uneven colour changes.
+- `hurt`, `stain`, `scar`: tick numbers until which a cell shows corruption, a swallowed cell dissolving, or a faint mark where infection was eaten.
+
+**Infection cells**
+
+- `germ`: armour layers left (0 means not infected). `owner`: the colony's id. `germHit`: the tick the cell last lost a layer.
+
+**Colonies** (`colonies`, and `byId` for lookup)
+
+- `traits` is the rolled nature; the same values are copied onto the colony for speed.
+- `cells` is a list of indices that may contain dead entries; `held` is the matching Set that stops an index being listed twice. Always test a cell with `alive(c, i)`. Both are rebuilt together when the list gets too stale.
+- `count` is the true number of living cells. `energy` is how many more cells it may ever grow.
+
+**Heads** (`heads`)
+
+- The creature is one or more heads. Each has a position, heading, radius, a `mode`, a `plan`, a `prey`, its own trail `path`, and inner state: `arousal`, `restless`, `fullness`, `anger`, `heat`, `sick`, `vitality`.
+- The global `head` points at whichever head is acting. `tick` sets it before `moveHead` and `stampHead`; `updateColonies` sets it to the head nearest each colony. Anything that reads `head` relies on that.
+
+## One tick
+
+1. Every creature cell loses one tick of life.
+2. For each head: `moveHead` (sense, pick or continue a mode, steer, move), then `stampHead` (top up the cells under it, eat or chip the infection under it, trigger retaliation).
+3. `manageHeads`: heads may divide; extra heads wither.
+4. `updateColonies`: maybe spawn; then for each colony survey, grow, retreat, maybe throw a spore; remove dead colonies.
+5. Flecks move and expire.
+
+Drawing happens separately, once per animation frame in which at least one tick ran.
+
+## Rules that must hold
+
+- **Infections cannot win.** Growth only ever spends `energy`, spores hand over part of the parent's energy, and nothing adds energy. The creature gets stronger with `heat`.
+- **Seeded runs replay exactly.** Tick logic uses only `random()`. `Math.random()` is used once, to pick a seed. Drawing and hover code must not call `random()` or change simulation state. User input (steering, double-click) is allowed to change a run.
+- **Bookkeeping stays consistent.** `infected` equals the number of cells with `germ > 0`; each colony's `count` equals the cells it owns. Only `addCell` and `removeCell` change these.
+- **Nothing is chosen from a list of types.** Behaviour comes from continuous traits and rolled plans. A new behaviour should be a new trait or a new plan dimension, not a new named kind.
+
+## Adding a trait
+
+1. Add it to `TRAITS` with its range and a one-line meaning.
+2. Roll it in `rollTraits`. `mutate` picks it up automatically.
+3. Copy it onto the colony in `buildColony`, and give it a visible cue in `c.look` if it should be readable on screen.
+4. Use it where the behaviour happens.
+5. Add a label to `SHOWN` so the hover panel shows it, and a row to the trait table in the README.
+6. Run the benchmark before and after (see `CONTRIBUTING.md`).
