@@ -67,12 +67,13 @@
   const LOOK = 15;         // how far ahead the head looks, in cells
   const OWN_NECK = 40;     // newest path points the head doesn't count as an obstacle
   const TAIL = 105;        // ticks a cell under the very centre of the head survives
+  const FULL = TAIL * 1.45 + 5;   // the longest life a cell can be given
   const HIT_GAP = 25;      // ticks before the same infected cell can lose another layer
   const MAX_COLONIES = 6;
   const MAX_HEADS = 4;
 
   let cols, rows, px, dpr, area;
-  let life, born, num, edge, vigor, tint, hurt;
+  let life, born, edge, vigor, tint, hurt;
   let germ, germHit, owner;
   let colonies, byId, nextId, infected, pressure, pressureGoal, pressureTimer;
   let arcs, stain, motes, scar, cleared, core;
@@ -98,13 +99,6 @@
   const skew = p => Math.pow(random(), p);   // p > 1 leans toward 0
   const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
-  // 1 + seven coin flips: 1..8, clustered around 4 and 5
-  function rollNumber() {
-    let n = 1;
-    for (let i = 0; i < 7; i++) if (random() < 0.5) n++;
-    return n;
-  }
-
   // cheap repeatable noise, so a glitch holds still for a few ticks at a time
   function hash(a, b) {
     let h = Math.imul(a ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(b + 0x7f4a7c15, 0xc2b2ae35);
@@ -123,7 +117,6 @@
     area = n;
     life = new Float32Array(n);    // creature: ticks left
     born = new Float32Array(n);    // creature: life it was last topped up to
-    num = new Uint8Array(n);
     edge = new Float32Array(n);    // per-cell noise: ragged outline
     vigor = new Float32Array(n);   // per-cell noise: how long it lasts
     tint = new Float32Array(n);    // per-cell noise: when it changes colour
@@ -656,7 +649,9 @@
     h.plan = makePlan(h.prey);
     if (startled) {
       h.mode = 'alert';
-      h.timer = rand(25, 45) * (1 - 0.7 * Math.min(1, h.heat));
+      // roused from rest it takes longer to come round
+      h.timer = rand(25, 45) * (1 - 0.7 * Math.min(1, h.heat)) * (1.6 - h.arousal);
+      h.arousal = h.arousalGoal = 0.8;
     } else {
       h.mode = 'approach';
       h.timer = h.plan.patience;
@@ -827,7 +822,6 @@
         const inward = 1 - Math.max(u, 0);
         const v = TAIL * inward * inward * vigor[i] + 5;
         if (v > life[i]) {
-          if (life[i] <= 0) num[i] = rollNumber();
           life[i] = born[i] = v;
         }
       }
@@ -1027,7 +1021,9 @@
         const i = y * cols + x;
         if (life[i] <= 0 || germ[i]) continue;
         ctx.fillStyle = hurt[i] > tickNo ? (hash(i, slot) % 5 < 3 ? RED : BLACK) : core[i] && stain[i] <= tickNo ? '#d9d0ff' : INK[band(i)];
-        ctx.fillText(num[i], x * px + px / 2 + 0.5, y * px + px / 2 + 1);
+        // the number is how much life the cell has left, 8 down to 1
+        // (on a square-root scale, so the low end isn't all ones)
+        ctx.fillText(Math.max(1, Math.ceil(Math.sqrt(life[i] / FULL) * 8)), x * px + px / 2 + 0.5, y * px + px / 2 + 1);
       }
     }
     drawColonyGlyphs();

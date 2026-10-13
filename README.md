@@ -21,7 +21,7 @@ Open `index.html` in any web browser. There is nothing to install.
 - **The body** stretches out along its heading when it moves fast and sits squat when it is still.
 - **The dark violet patch** inside the creature is its nucleus. It leans toward whatever the creature is watching, so you can see it notice an infection before it moves, and it tightens when the creature coils to strike.
 - **Faint pink cells** mark where infection was recently eaten. They fade.
-- **Numbers** appear on the cells the creature has passed over. Each is rolled from 1 to 8. The code gives them no further meaning.
+- **Numbers** on the creature's cells count down how much life each cell has left, from 8 to 1, so the body reads like a contour map: high in the middle of the front, falling away toward the edges and down the trail.
 - **Violet-to-pink cells** are infected cells being swallowed and dissolving.
 - **Black and red flickering cells** in the creature's body are parts that have been corrupted after a bite bounced off armour.
 - **Red dots arcing across the grid** are spores in flight, landing new infections.
