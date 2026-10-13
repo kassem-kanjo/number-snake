@@ -3,7 +3,7 @@
 # Run from anywhere:  mac/build.sh        Output goes to mac/dist/ (git-ignored).
 set -euo pipefail
 
-VERSION="0.3.2"            # the one place the version number lives
+VERSION="0.3.3"            # the one place the version number lives
 MIN_MACOS="12.0"
 APP_ID="com.kassemkanjo.numbersnake"
 SAVER_ID="com.kassemkanjo.numbersnake.saver"

@@ -4,6 +4,11 @@ What was decided, why, and what was tried and thrown away. Newest first. Benchma
 
 ## 2026-10-13
 
+### The screensaver was frozen on first real use
+The owner installed the screensaver and saw an empty grid with nothing moving. Inside macOS's screensaver host the web view is not counted as visible, so the page's `requestAnimationFrame` loop never fires; the first draw happens and nothing after it. This was the part flagged as untested since the screensaver was built, and the test window used then had been a visible one.
+
+Fix: the page's loop is split into `step(now)`, which advances by elapsed time and so is safe to call from several places. The screensaver calls it from `animateOneFrame` 30 times a second, and in the screensaver view the page also runs it on a plain timer. Tested by loading the built bundle in a window that is never shown (`document.hidden` true, as in the real host): 128 ticks in four seconds, the expected rate, both when driven by the saver and on the timer alone.
+
 ### One defender in the screensaver; targets are shared out; the ring is alive
 Three requests before the owner first tried the screensaver.
 
