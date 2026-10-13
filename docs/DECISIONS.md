@@ -4,6 +4,9 @@ What was decided, why, and what was tried and thrown away. Newest first. Benchma
 
 ## 2026-10-13
 
+### The fresh trail is a barrier
+Infection cannot grow or retreat into a creature cell that still has more than 34% of its life (its first three colours). One line in `pickFrontier`. In busy mode the trail turned away 56,000 to 77,000 growth attempts per 200,000 ticks, so it is constantly in play, while lifetimes stayed inside run-to-run noise (median 543 to 560 ticks against 551 to 568 before; slowest 10% 1413 to 1555 against 1458 to 1473). Calm mode: 11,000 blocked, all outbreaks cleared. Kept: it gives circling a purpose and sets up a defender that pens its prey.
+
 ### Calm is the default; controls are a pinhole
 The owner asked for the calm pace by default, with the busy pace behind a button, and for the controls to collapse into a small dot that opens on hover. The panel overlays the bottom of the grid while open rather than reserving space, so the grid never jumps. Benchmark names changed to match: no argument is calm, `busy` is the old normal. Numbers per mode are unchanged by this (calm: about 75 outbreaks per 100,000 ticks, idle 74%; busy: about 290, idle 31%).
 

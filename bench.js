@@ -85,6 +85,7 @@ console.log(JSON.stringify({
   maxInfectedPct: Math.round(100 * maxInfected),
   maxGeneration: maxGen,
   splitPct: pct(split),
+  growthBlockedByTrail: s.walled,
   maxHeads,
 }, null, 1));
 

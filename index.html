@@ -102,6 +102,7 @@
   const OWN_NECK = 40;     // newest path points the head doesn't count as an obstacle
   const TAIL = 105;        // ticks a cell under the very centre of the head survives
   const FULL = TAIL * 1.45 + 5;   // the longest life a cell can be given
+  const BARRIER = 0.34;    // a creature cell blocks infection while it has more than this share of its life left
   const HIT_GAP = 25;      // ticks before the same infected cell can lose another layer
   const MAX_COLONIES = 6;
   const MAX_HEADS = 4;
@@ -111,6 +112,7 @@
   let germ, germHit, owner;
   let colonies, byId, nextId, infected, pressure, pressureGoal, pressureTimer;
   let arcs, stain, motes, scar, cleared, core;
+  let walled = 0;          // growth attempts the trail has turned away, for the benchmark
   const landed = [];   // spore children that landed this tick
   let tickNo, heads, head, target = null;   // `head` is whichever head is acting right now
   let paused = false;
@@ -357,7 +359,11 @@
     const x = from % cols + [1, -1, 0, 0][d], y = Math.floor(from / cols) + [0, 0, 1, -1][d];
     if (x < 0 || y < 0 || x >= cols || y >= rows) return -1;
     const i = y * cols + x;
-    return germ[i] ? -1 : i;
+    if (germ[i]) return -1;
+    // the creature's fresh trail is a wall: infection can't grow into it,
+    // so where the creature has just been shapes where a colony can go
+    if (life[i] > BARRIER * born[i]) { walled++; return -1; }
+    return i;
   }
 
   // One rule grows every colony: look at a few empty neighbours and take the
@@ -1333,6 +1339,7 @@
     get head() { return heads[0]; },
     get heads() { return heads; },
     get cleared() { return cleared; },
+    get walled() { return walled; },
     get colonies() { return colonies; },
     get infected() { return infected / area; },
     tick, draw, restart, setAmbient,
