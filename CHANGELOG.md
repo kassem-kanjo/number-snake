@@ -10,6 +10,7 @@ Notable changes to Number Snake. The format follows [Keep a Changelog](https://k
 - The creature's fresh trail is a barrier: infection cannot grow, or back away, into cells the creature has just covered.
 - A screensaver view (`saver=1` in the address): the grid and nothing else, ignoring input.
 - Fullscreen (F or the Fullscreen button): nothing but the grid, with the controls hidden while the mouse is still.
+- A second, permanent defender, the warden (teal and green): it circles an infection colony, tightens in, then coils and crushes it. It is calmer than the hunter and never divides.
 
 ### Fixed
 - The control panel clipping when its text grew, staying open after a click, and its hover area blocking the grid beneath it.

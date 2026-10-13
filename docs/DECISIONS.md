@@ -4,6 +4,21 @@ What was decided, why, and what was tried and thrown away. Newest first. Benchma
 
 ## 2026-10-13
 
+### A second species: the warden
+Added a second permanent defender beside the hunter (GitHub issue #5). The owner asked for "one that circles then crushes the virus, and it acts way more calm and calculated". The warden is teal and green, so it reads apart from the blue hunter. Each species is a record of numbers in one `SPECIES` table, and no code chooses behaviour by species name.
+
+Outbreak mode, 200,000 ticks on a 90 by 60 grid, two runs each (run 1 / run 2). Before, then after: outbreaks cleared 523 / 549, then 517 / 580. Median life 600 / 488, then 473 / 431. Slowest tenth (life90) 1556 / 1263, then 1140 / 990. Idle 28% / 36%, then 37% / 35%. Peak infected share 35% / 60%, then 43% / 43%. Trail-blocked growth 72,792 / 84,346, then 73,393 / 80,789. The warden ate 12% / 13% of infected cells. With two defenders, outbreaks live about 15 to 20% shorter at the median and about 25 to 30% shorter in the slowest tenth.
+
+Calm mode, same settings: outbreaks cleared 147 / 143, then 147 / 142. Median life 454 / 442, then 378 / 366. Slowest tenth 838 / 849, then 625 / 563. Idle 76% / 74%, then 79% / 79%. Peak infected share 6% / 6%, then 4% / 4%. The warden ate 10% / 11%. Calm mode is quieter but not trivial.
+
+Circling, measured over 100,000 Outbreak ticks, two runs: the warden made 217 / 179 circling approaches. The median total angle around the prey's centre was 0.90 / 0.91 of a turn over all approaches, and 1.41 / 1.35 turns for approaches that went on to a strike. Its net (signed) angle is smaller, about 0.2 of a turn, because it reverses at walls and colonies often sit near one. About 57% / 59% of approaches travelled at least 0.75 of a turn. About half do not end in a strike, because the hunter eats the prey first or the head changes target. Warden strikes: 82 / 66, all slow (burst below 0.7). Hunter strikes: 865 / 795, of which 56 / 44 were slow. Trail-blocked growth attempts per 100,000 busy ticks went from 44,551 / 34,620 to 45,765 / 37,416, so there is no clear change.
+
+Tuned or rejected:
+- The first warden pace of 0.35 to 0.6 was too slow to get round a ring of 15 to 20 cells in the circling time (median 0.38 net and 0.65 gross turns). It became 0.7 to 1.1.
+- Circling time began at 260 to 520 ticks and became 200 to 420. That gave about 25 more strikes per 100,000 ticks while the median travel stayed above 0.75 of a turn.
+- Wall reversal was added. Without it, colonies within about 14 cells of a wall were circled poorly (net 0.43 turns, against 1.07 for colonies in the open). Reversal raised the total angle travelled but lowered the net angle. It happens at most once every 60 ticks.
+- Cells are coloured by species, using a per-cell `who` array, rather than by the head now on the cell. Each cell keeps the colour of whoever laid it.
+
 ### The busy mode is called Outbreak
 The owner found "Busy" dull for something meant to be shown off. Outbreak says what the mode is in the simulation's own terms. The button turns red when it is on.
 
