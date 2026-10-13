@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Number Snake</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0b0c; overflow: hidden; }
+  body { display: flex; flex-direction: column; font: 13px/1 -apple-system, "Helvetica Neue", Arial, sans-serif; color: #9a9aa0; }
+  #stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 16px 16px 8px; }
+  canvas { background: #fff; border-radius: 14px; touch-action: none; cursor: crosshair; }
+  #bar { display: flex; gap: 14px; align-items: center; justify-content: center; padding: 6px 16px 14px; flex-wrap: wrap; }
+  button { font: inherit; color: #ddd; background: #1c1c20; border: 1px solid #333; border-radius: 7px; padding: 7px 12px; cursor: pointer; }
+  button:hover { background: #26262b; }
+  label { display: flex; gap: 8px; align-items: center; }
+  input[type=range] { width: 120px; accent-color: #e8552b; }
+  .hint { opacity: .7; }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="c"></canvas></div>
+<div id="bar">
+  <button id="pause">Pause</button>
+  <button id="restart">Restart</button>
+  <label>Speed <input id="speed" type="range" min="4" max="90" value="26"></label>
+  <span class="hint">Hold the mouse down on the grid to steer · space = pause · R = restart</span>
+</div>
+<script>
+(() => {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const stage = document.getElementById('stage');
+
+  // Colour is how many layers of the snake are stacked on a cell.
+  const FILL = [null, '#e8552b', '#7d70e2', '#eba6d6', '#e6e545', '#3f7d1f'];
+  const INK  = [null, '#6a1206', '#17146b', '#5c1d4f', '#4b4a00', '#0c2604'];
+
+  const STEP = 0.4;        // cells the head moves per tick
+  const MAX_TURN = 0.09;   // radians per tick
+  const COOLDOWN = 60;     // ticks before the same layer can touch a cell again
+
+  // The snake is a row of discs following the head's path. Discs with s:+1 add
+  // a layer to every cell they cover, discs with s:-1 take one away. The
+  // removers use the same radii as the adders, so the body dissolves exactly.
+  const cells = n => Math.round(n / STEP);
+  const DISCS = [
+    { lag: cells(0),   r: 1.2,  s: +1 },
+    { lag: cells(22),  r: 2.5,  s: +1 },
+    { lag: cells(34),  r: 3.2,  s: +1 },
+    { lag: cells(46),  r: 0.7,  s: +1 },
+    { lag: cells(56),  r: 0.35, s: +1 },
+    { lag: cells(118), r: 0.35, s: -1 },
+    { lag: cells(128), r: 0.7,  s: -1 },
+    { lag: cells(140), r: 3.2,  s: -1 },
+    { lag: cells(154), r: 2.5,  s: -1 },
+    { lag: cells(174), r: 1.2,  s: -1 },
+  ];
+  const MAX_LAG = Math.max(...DISCS.map(d => d.lag));
+
+  let cols, rows, px, dpr;
+  let depth, num, jitter, last;
+  let path, tickNo, head, target = null;
+  let paused = false;
+
+  const rand = (a, b) => a + Math.random() * (b - a);
+
+  // 1 + seven coin flips: 1..8, clustered around 4 and 5
+  function rollNumber() {
+    let n = 1;
+    for (let i = 0; i < 7; i++) if (Math.random() < 0.5) n++;
+    return n;
+  }
+
+  function reset() {
+    const n = cols * rows;
+    depth = new Uint8Array(n);
+    num = new Uint8Array(n);
+    jitter = new Float32Array(n);
+    for (let i = 0; i < n; i++) jitter[i] = rand(-0.45, 0.45);
+    last = DISCS.map(() => new Int32Array(n).fill(-1e9));
+    path = [];
+    tickNo = 0;
+    head = {
+      x: cols * rand(0.3, 0.7), y: rows * rand(0.3, 0.7),
+      a: rand(0, Math.PI * 2),
+      k: 0, kGoal: 0, kTimer: 0,
+      w: 1, wGoal: 1, wTimer: 0,
+    };
+  }
+
+  function layout() {
+    const w = stage.clientWidth - 32, h = stage.clientHeight - 24;
+    px = Math.max(13, Math.min(22, Math.round(Math.min(w, h) / 44)));
+    cols = Math.max(12, Math.floor(w / px));
+    rows = Math.max(12, Math.floor(h / px));
+    dpr = window.devicePixelRatio || 1;
+    canvas.style.width = cols * px + 'px';
+    canvas.style.height = rows * px + 'px';
+    canvas.width = cols * px * dpr;
+    canvas.height = rows * px * dpr;
+    reset();
+    draw();
+  }
+
+  function turnToward(angle, rate) {
+    let d = angle - head.a;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    head.a += Math.max(-rate, Math.min(rate, d));
+  }
+
+  function moveHead() {
+    const h = head;
+    const margin = 6;
+    const outside = h.x < margin || h.y < margin || h.x > cols - margin || h.y > rows - margin;
+
+    if (target) {
+      turnToward(Math.atan2(target.y - h.y, target.x - h.x), MAX_TURN);
+    } else if (outside) {
+      turnToward(Math.atan2(rows / 2 - h.y, cols / 2 - h.x), MAX_TURN * 0.8);
+    } else {
+      // wander: curvature drifts toward a goal that changes now and then
+      if (--h.kTimer <= 0) {
+        h.kGoal = Math.random() < 0.2 ? rand(-MAX_TURN, MAX_TURN) : rand(-0.04, 0.04);
+        h.kTimer = rand(30, 110);
+      }
+      h.k += (h.kGoal - h.k) * 0.06;
+      h.a += h.k;
+    }
+
+    // body thickness swells and thins along the snake
+    if (--h.wTimer <= 0) { h.wGoal = rand(0.6, 1.5); h.wTimer = rand(40, 120); }
+    h.w += (h.wGoal - h.w) * 0.03;
+
+    h.x += Math.cos(h.a) * STEP;
+    h.y += Math.sin(h.a) * STEP;
+    path.push({ x: h.x, y: h.y, w: h.w });
+    if (path.length > MAX_LAG + 1) path.shift();
+  }
+
+  function stamp(k) {
+    const disc = DISCS[k];
+    const p = path[path.length - 1 - disc.lag];
+    if (!p) return;
+    const R = disc.r * p.w;
+    const reach = R + 0.5;
+    const x0 = Math.max(0, Math.floor(p.x - reach)), x1 = Math.min(cols - 1, Math.floor(p.x + reach));
+    const y0 = Math.max(0, Math.floor(p.y - reach)), y1 = Math.min(rows - 1, Math.floor(p.y + reach));
+    const seen = last[k];
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const i = y * cols + x;
+        if (Math.hypot(x + 0.5 - p.x, y + 0.5 - p.y) >= R + jitter[i]) continue;
+        if (tickNo - seen[i] <= COOLDOWN) continue;
+        seen[i] = tickNo;
+        if (disc.s > 0) {
+          if (depth[i] === 0) num[i] = rollNumber();
+          depth[i]++;
+        } else if (depth[i] > 0) {
+          depth[i]--;
+        }
+      }
+    }
+  }
+
+  function tick() {
+    tickNo++;
+    moveHead();
+    for (let k = 0; k < DISCS.length; k++) stamp(k);
+  }
+
+  function draw() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, cols * px, rows * px);
+
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const d = depth[y * cols + x];
+        if (!d) continue;
+        ctx.fillStyle = FILL[Math.min(d, 5)];
+        ctx.fillRect(x * px, y * px, px, px);
+      }
+    }
+
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.75;
+    ctx.beginPath();
+    for (let x = 1; x < cols; x++) { ctx.moveTo(x * px + 0.5, 0); ctx.lineTo(x * px + 0.5, rows * px); }
+    for (let y = 1; y < rows; y++) { ctx.moveTo(0, y * px + 0.5); ctx.lineTo(cols * px, y * px + 0.5); }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    ctx.font = `600 ${Math.round(px * 0.7)}px "Lato", "Helvetica Neue", Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const i = y * cols + x, d = depth[i];
+        if (!d) continue;
+        ctx.fillStyle = INK[Math.min(d, 5)];
+        ctx.fillText(num[i], x * px + px / 2 + 0.5, y * px + px / 2 + 1);
+      }
+    }
+  }
+
+  const speed = document.getElementById('speed');
+  let prev = performance.now(), owed = 0;
+  function frame(now) {
+    const dt = Math.min(0.25, (now - prev) / 1000);
+    prev = now;
+    if (!paused) {
+      owed += dt * speed.value;
+      let ran = false;
+      while (owed >= 1) { tick(); owed--; ran = true; }
+      if (ran) draw();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  const pauseBtn = document.getElementById('pause');
+  function togglePause() {
+    paused = !paused;
+    pauseBtn.textContent = paused ? 'Play' : 'Pause';
+  }
+  function restart() { reset(); draw(); }
+
+  pauseBtn.onclick = togglePause;
+  document.getElementById('restart').onclick = restart;
+  addEventListener('keydown', e => {
+    if (e.code === 'Space') { e.preventDefault(); togglePause(); }
+    if (e.key === 'r' || e.key === 'R') restart();
+  });
+
+  function pointAt(e) {
+    const b = canvas.getBoundingClientRect();
+    target = { x: (e.clientX - b.left) / px, y: (e.clientY - b.top) / px };
+  }
+  canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture(e.pointerId); pointAt(e); });
+  canvas.addEventListener('pointermove', e => { if (target) pointAt(e); });
+  canvas.addEventListener('pointerup', () => { target = null; });
+  canvas.addEventListener('pointercancel', () => { target = null; });
+
+  let resizeTimer;
+  addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(layout, 150); });
+
+  layout();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
