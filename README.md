@@ -100,6 +100,10 @@ Run `node bench.js [ticks] [cols] [rows] [ambient]` from the project folder (add
 
 Each benchmark run uses a new random seed, so numbers change from run to run. Compare runs with a large tick count, and expect some variation.
 
+## Credit
+
+The idea started from a grid animation by Antonin Waterkeyn, seen in a [post by Figs From Plums](https://x.com/FigsFromPlums/status/2108195710210396426): a snake made of numbered, coloured cells moving across a grid. All code here was written for this project.
+
 ## Project docs
 
 - [CHANGELOG.md](CHANGELOG.md): what changed in each version.
