@@ -110,3 +110,7 @@ The idea started from a grid animation by Antonin Waterkeyn, seen in a [post by 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the code is organised and the rules it must keep.
 - [docs/DECISIONS.md](docs/DECISIONS.md): what was decided and why, including ideas that were tried and dropped.
 - [CONTRIBUTING.md](CONTRIBUTING.md): how changes are made, checked and released.
+
+## Licence
+
+[MIT](LICENSE). Use it, change it, share it; keep the copyright notice.
