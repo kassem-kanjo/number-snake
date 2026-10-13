@@ -4,6 +4,9 @@ What was decided, why, and what was tried and thrown away. Newest first. Benchma
 
 ## 2026-10-13
 
+### Roadmap review
+The owner chose three ideas to build (fullscreen, the trail as a barrier, a second species that circles and crushes) and turned down four: infections that merge or fight, the creature changing with what it eats, painting infection by dragging, and a timeline strip. Those issues are closed as not planned. The project is public under the MIT licence.
+
 ### Ambient mode is a mode, not a second simulation
 Ambient scales a few existing rates (spawn chance ×0.3, budgets ×0.55, growth ×0.5, at most two colonies, tick rate ×0.6) instead of adding separate logic. Result: 154 outbreaks against 534, idle 73% against 31%, infection never above 6% of the grid, no splitting.
 

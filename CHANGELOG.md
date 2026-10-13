@@ -4,6 +4,9 @@ Notable changes to Number Snake. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+### Added
+- MIT licence.
+
 ## [0.1.0] - 2026-10-13
 
 First tagged version.
