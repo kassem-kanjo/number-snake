@@ -4,6 +4,12 @@ Notable changes to Number Snake. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-13
+
+### Changed
+- The warden's clap has weight. The ring draws back slightly, squeezes slowly, then slams shut; debris sprays out, a ripple runs outward, and the grid jolts and holds for an instant.
+- Nothing survives a clap: whatever the closing ring meets is flattened, armour included. Armour still costs the hunter a bite per layer.
+
 ## [0.3.0] - 2026-10-13
 
 ### Added
