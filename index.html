@@ -12,6 +12,7 @@
   #bar { display: flex; gap: 14px; align-items: center; justify-content: center; padding: 6px 16px 14px; flex-wrap: wrap; }
   button { font: inherit; color: #ddd; background: #1c1c20; border: 1px solid #333; border-radius: 7px; padding: 7px 12px; cursor: pointer; }
   button:hover { background: #26262b; }
+  button.live { border-color: #e3122b; color: #ff8a98; }
   label { display: flex; gap: 8px; align-items: center; }
   input[type=range] { width: 120px; accent-color: #2f6fe4; }
   .hint { opacity: .7; }
@@ -35,6 +36,7 @@
 <div id="bar">
   <button id="pause">Pause</button>
   <button id="restart">Restart</button>
+  <button id="record" title="Save a video clip of the grid">Record</button>
   <label>Speed <input id="speed" type="range" min="4" max="140" value="55"></label>
   <a id="seed" class="hint" title="Link to this exact run"></a>
   <span id="tally" class="hint"></span>
@@ -160,7 +162,7 @@
       anger: 0,         // rises when bites bounce off armour
       heat: 0,          // anger plus how much of the grid is infected
       memory: [],       // where it last fed
-      stretch: 1, gaze: a,
+      stretch: 1, gaze: a, beat: 0,
       sick: 0,          // poison in its system: slows and shrinks it until it wears off
       vitality: 1,      // a split-off head withers once things calm down
     };
@@ -769,7 +771,9 @@
     h.v += (speed - h.v) * (h.mode === 'strike' ? 0.4 : 0.12);
     h.r += (h.rGoal - h.r) * swell;
     // the more infection there is, the bigger it gets; a withering head shrinks away
-    h.R = h.r * (1 + 0.6 * hot) * Math.min(1, h.vitality * 3) * (1 - 0.3 * h.sick);
+    // a pulse runs through it, slow at rest and quick when it is worked up
+    h.beat += 0.06 + 0.1 * h.arousal + 0.25 * hot;
+    h.R = h.r * (1 + 0.6 * hot) * Math.min(1, h.vitality * 3) * (1 - 0.3 * h.sick) * (1 + 0.05 * Math.sin(h.beat));
     h.lobe += 0.05;
 
     h.x = clamp(h.x + Math.cos(h.a) * h.v, 1, cols - 1);
@@ -953,8 +957,10 @@
     // the head coils to strike.
     core.fill(0);
     for (const h of heads) {
-      const tight = h.mode === 'windup' ? 0.2 : h.mode === 'alert' ? 0.36 : 0.28;
-      const nr = Math.max(1.1, h.R * tight);
+      // wide when something catches its eye, narrow when coiled, nearly shut when it dozes
+      const tight = h.mode === 'windup' ? 0.2 : h.mode === 'alert' ? 0.36
+        : h.mode === 'idle' ? 0.1 + 0.18 * Math.min(1, h.arousal * 4) : 0.28;
+      const nr = Math.max(0.7, h.R * tight);
       const nx = h.x + Math.cos(h.gaze) * h.R * 0.38, ny = h.y + Math.sin(h.gaze) * h.R * 0.38;
       for (let y = Math.max(0, Math.floor(ny - nr - 1)); y <= Math.min(rows - 1, Math.floor(ny + nr + 1)); y++) {
         for (let x = Math.max(0, Math.floor(nx - nr - 1)); x <= Math.min(cols - 1, Math.floor(nx + nr + 1)); x++) {
@@ -1147,6 +1153,35 @@
   canvas.addEventListener('pointerdown', () => showTip());   // steering hides it
   // the colony changes every tick (and the sim may be paused), so refresh on its own loop
   (function tipLoop() { if (hover) showTip(); requestAnimationFrame(tipLoop); })();
+
+  // Record the grid to a video file. Pressing the button again stops and saves.
+  const recordBtn = document.getElementById('record');
+  let recorder = null;
+  recordBtn.onclick = () => {
+    if (recorder) { recorder.stop(); return; }
+    if (!canvas.captureStream || typeof MediaRecorder === 'undefined') {
+      recordBtn.textContent = 'Not supported here';
+      return;
+    }
+    const type = ['video/webm;codecs=vp9', 'video/webm', 'video/mp4'].find(t => MediaRecorder.isTypeSupported(t));
+    const chunks = [];
+    const started = seed;
+    recorder = new MediaRecorder(canvas.captureStream(30), { mimeType: type, videoBitsPerSecond: 8e6 });
+    recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+    recorder.onstop = () => {
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(new Blob(chunks, { type }));
+      link.download = `number-snake-${started}.${type.includes('mp4') ? 'mp4' : 'webm'}`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+      recorder = null;
+      recordBtn.textContent = 'Record';
+      recordBtn.classList.remove('live');
+    };
+    recorder.start();
+    recordBtn.textContent = 'Stop & save';
+    recordBtn.classList.add('live');
+  };
 
   let resizeTimer;
   addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(layout, 150); });

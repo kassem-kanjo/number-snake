@@ -12,6 +12,7 @@ Open `index.html` in any web browser. There is nothing to install.
 - Space pauses and resumes. R restarts with a new grid.
 - The Pause and Restart buttons do the same as the keys.
 - The Speed slider sets how many simulation steps run per second.
+- Record saves a video clip of the grid. Press it once to start and again to stop; the file downloads when you stop.
 - The "run" number in the bar is a link to that exact run. Opening it replays the same run, as long as the window is the same size and you don't steer.
 
 ## What you are looking at
@@ -19,7 +20,7 @@ Open `index.html` in any web browser. There is nothing to install.
 - **Blue cells** are the creature's body. A freshly touched cell is bright blue. It fades through cyan, violet and mint into dark navy as its life runs out.
 - **The trail** is thickest under the centre of the creature and thins toward its edge.
 - **The body** stretches out along its heading when it moves fast and sits squat when it is still.
-- **The dark violet patch** inside the creature is its nucleus. It leans toward whatever the creature is watching, so you can see it notice an infection before it moves, and it tightens when the creature coils to strike.
+- **The dark violet patch** inside the creature is its nucleus. It leans toward whatever the creature is watching, so you can see it notice an infection before it moves. It tightens when the creature coils to strike and nearly closes when the creature dozes.
 - **Faint pink cells** mark where infection was recently eaten. They fade.
 - **Numbers** on the creature's cells count down how much life each cell has left, from 8 to 1, so the body reads like a contour map: high in the middle of the front, falling away toward the edges and down the trail.
 - **Violet-to-pink cells** are infected cells being swallowed and dissolving.
