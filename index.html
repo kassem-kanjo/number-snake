@@ -1503,6 +1503,9 @@
   };
 
   layout();
+  // `skip=N` in the address starts the run N ticks in, so a link can open mid-action
+  for (let n = Math.min(parseInt(query.get('skip'), 10) || 0, 500000); n > 0; n--) tick();
+  draw();
   requestAnimationFrame(frame);
 })();
 </script>

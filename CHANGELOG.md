@@ -4,6 +4,12 @@ Notable changes to Number Snake. The format follows [Keep a Changelog](https://k
 
 ## [Unreleased]
 
+### Added
+- `skip=N` in the address starts a run N ticks in, so a link can open mid-action.
+
+### Changed
+- The README is shorter, leads with an image and links to play or download, and explains each trait alongside how to spot it. The benchmark's field list moved to CONTRIBUTING.md.
+
 ## [0.2.0] - 2026-10-13
 
 ### Added
