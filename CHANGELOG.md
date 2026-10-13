@@ -6,6 +6,7 @@ Notable changes to Number Snake. The format follows [Keep a Changelog](https://k
 
 ### Added
 - MIT licence.
+- The creature's fresh trail is a barrier: infection cannot grow, or back away, into cells the creature has just covered.
 - Fullscreen (F or the Fullscreen button): nothing but the grid, with the controls hidden while the mouse is still.
 
 ### Changed

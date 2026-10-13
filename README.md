@@ -20,7 +20,7 @@ Open `index.html` in any web browser. There is nothing to install.
 ## What you are looking at
 
 - **Blue cells** are the creature's body. A freshly touched cell is blue when the creature is calm and shifts toward bright cyan as it gets worked up. It fades through cyan, violet and mint into dark navy as its life runs out.
-- **The trail** is thickest under the centre of the creature and thins toward its edge.
+- **The trail** is thickest under the centre of the creature and thins toward its edge. While it is fresh (its first three colours) it is a wall: infection cannot grow into it or back away through it, so a creature that circles an infection pens it in.
 - **The body** stretches out along its heading when it moves fast and sits squat when it is still.
 - **The dark violet patch** inside the creature is its nucleus. It leans toward whatever the creature is watching, so you can see it notice an infection before it moves. It tightens when the creature coils to strike and nearly closes when the creature dozes.
 - **Faint pink cells** mark where infection was recently eaten. They fade.
@@ -97,6 +97,7 @@ Run `node bench.js [ticks] [cols] [rows] [busy]` from the project folder. It tes
 - `maxInfectedPct`: the highest share of the grid that was infected, in percent.
 - `maxGeneration`: the deepest spore generation seen (0 is an original infection).
 - `splitPct`: percent of ticks with more than one head.
+- `growthBlockedByTrail`: how many times the creature's fresh trail stopped an infection growing or backing away.
 - `maxHeads`: the most heads alive at one time.
 
 Each benchmark run uses a new random seed, so numbers change from run to run. Compare runs with a large tick count, and expect some variation.
