@@ -1,0 +1,58 @@
+# How work is done here
+
+## Workflow
+
+1. **Start from an issue.** Every change has a GitHub issue that says what and why. Ideas go in as issues labelled `idea` until they are picked up.
+2. **Branch off `main`.** Name it by kind and topic: `feat/trail-barrier`, `fix/wall-clipping`, `docs/architecture`.
+3. **Open a pull request** that links the issue (`Closes #12`), says what changed and how it was checked, and includes benchmark numbers for anything that touches the simulation.
+4. **Checks must pass.** The pull request runs `node bench.js --check`.
+5. **Merge by squash**, delete the branch, and add a line to `CHANGELOG.md` under Unreleased.
+
+`main` should always open and run.
+
+## Checking a change
+
+```bash
+node bench.js 200000
+```
+
+Run it before and after, at least twice each, because every run uses a new seed. Compare against these expectations for normal mode on the default 90 by 60 grid:
+
+| Field | Healthy range |
+|---|---|
+| `stillAlive` | 0 to 6, with `oldestStillAlive` not growing run to run |
+| `lifeMedian` | 480 to 640 ticks |
+| `life90` | 1200 to 1500 ticks |
+| `idlePct` | 26 to 37 |
+| `maxInfectedPct` | usually 30 to 55 |
+
+A change is suspect if it moves `lifeMedian` or `life90` by more than about 25%, or pushes `idlePct` below about 22. Record what you measured in `docs/DECISIONS.md`, including for ideas that were dropped.
+
+For ambient mode:
+
+```bash
+node bench.js 200000 90 60 ambient
+```
+
+The quick pass/fail version, used by CI:
+
+```bash
+node bench.js --check
+```
+
+It fails if the script throws, if bookkeeping drifts, if no outbreak is cleared, or if an outbreak survives far longer than any normal one.
+
+Then open `index.html` and look. The benchmark cannot judge how it feels.
+
+## Rules for the code
+
+Read `docs/ARCHITECTURE.md` first. In short:
+
+- Infections can never win.
+- Tick logic uses only the seeded `random()`; drawing never does.
+- New behaviour is a new trait or plan dimension, never a new named type.
+- If an addition is rarely visible or needs special cases all over, remove it and write down why.
+
+## Releases
+
+Versions follow semantic versioning. To release: move the Unreleased notes in `CHANGELOG.md` under a new version heading, merge, then tag and publish with `gh release create vX.Y.Z --notes-from-tag` or with the changelog section as notes.

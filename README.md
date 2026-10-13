@@ -84,7 +84,7 @@ When heat gets high enough, the creature can pinch into several heads, up to a f
 
 ## Testing
 
-Run `node bench.js [ticks] [cols] [rows] [ambient]` from the project folder (add the word `ambient` to test ambient mode). It needs only Node, not a browser. The defaults are 200000 ticks on a 90 by 60 grid. It runs the simulation headless and prints JSON:
+Run `node bench.js [ticks] [cols] [rows] [ambient]` from the project folder (add the word `ambient` to test ambient mode). `node bench.js --check` is the quick pass/fail version that runs on every pull request. It needs only Node, not a browser. The defaults are 200000 ticks on a 90 by 60 grid. It runs the simulation headless and prints JSON:
 
 - `ticks`: the number of steps run.
 - `outbreaksCleared`: infections that were fully eaten or died out during the run.
@@ -99,3 +99,10 @@ Run `node bench.js [ticks] [cols] [rows] [ambient]` from the project folder (add
 - `maxHeads`: the most heads alive at one time.
 
 Each benchmark run uses a new random seed, so numbers change from run to run. Compare runs with a large tick count, and expect some variation.
+
+## Project docs
+
+- [CHANGELOG.md](CHANGELOG.md): what changed in each version.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the code is organised and the rules it must keep.
+- [docs/DECISIONS.md](docs/DECISIONS.md): what was decided and why, including ideas that were tried and dropped.
+- [CONTRIBUTING.md](CONTRIBUTING.md): how changes are made, checked and released.
