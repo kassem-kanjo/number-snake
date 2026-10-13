@@ -48,6 +48,24 @@ It fails if the script throws, if bookkeeping drifts, if no outbreak is cleared,
 
 Then open `index.html` and look. The benchmark cannot judge how it feels.
 
+## What the benchmark prints
+
+`node bench.js [ticks] [cols] [rows] [outbreak]` tests the calm default; pass `outbreak` as the fourth argument for Outbreak mode. The defaults are 200000 ticks (80000 with `--check`) on a 90 by 60 grid, and the page picks its own cell size, so large grids can come out smaller than asked. Every run uses a new seed.
+
+- `ticks`: the number of steps run.
+- `outbreaksCleared`: infections that were fully eaten or died out during the run.
+- `stillAlive`: infections alive at the end.
+- `oldestStillAlive`: age in ticks of the oldest infection still alive.
+- `lifeMedian`, `life90`, `lifeMax`: median, 90th percentile and longest life, in ticks, of the cleared infections.
+- `idlePct`: percent of ticks the first head spent idle.
+- `severalAtOncePct`: percent of ticks with more than one infection alive.
+- `maxInfectedPct`: the highest share of the grid that was infected, in percent.
+- `maxGeneration`: the deepest spore generation seen (0 is an original infection).
+- `eatenShare`: percent of infected cells eaten by each species, by name.
+- `splitPct`: percent of ticks with a split-off head alive. The two permanent defenders do not count.
+- `growthBlockedByTrail`: how many attempts by an infection to grow or back away into the creature's fresh trail were turned away.
+- `maxHeads`: the most heads alive at one time, counting both permanent defenders.
+
 ## Rules for the code
 
 Read `docs/ARCHITECTURE.md` first. In short:
