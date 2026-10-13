@@ -16,5 +16,5 @@ jobs:
           node-version: 22
       - name: Simulation holds its rules (calm mode, the default)
         run: node bench.js --check
-      - name: Simulation holds its rules (busy mode)
-        run: node bench.js --check 80000 90 60 busy
+      - name: Simulation holds its rules (outbreak mode)
+        run: node bench.js --check 80000 90 60 outbreak

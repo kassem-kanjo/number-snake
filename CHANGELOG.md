@@ -6,13 +6,15 @@ Notable changes to Number Snake. The format follows [Keep a Changelog](https://k
 
 ### Added
 - MIT licence.
+- A hosted version at https://kassem-kanjo.github.io/number-snake/.
 - The creature's fresh trail is a barrier: infection cannot grow, or back away, into cells the creature has just covered.
+- A screensaver view (`saver=1` in the address): the grid and nothing else, ignoring input.
 - Fullscreen (F or the Fullscreen button): nothing but the grid, with the controls hidden while the mouse is still.
 
 ### Changed
-- The calm pace is now the default. The former normal pace is the Busy button, and run links carry `busy=1` instead of `ambient=1`.
+- The calm pace is now the default. The former normal pace is now called Outbreak and has its own button; run links carry `outbreak=1` instead of `ambient=1`.
 - The control bar is now a pinhole at the bottom of the window that opens into a panel on hover. The grid uses the freed space.
-- `bench.js` tests the calm mode by default; pass `busy` for busy mode.
+- `bench.js` tests the calm mode by default; pass `outbreak` for outbreak mode.
 
 ## [0.1.0] - 2026-10-13
 

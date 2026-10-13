@@ -1,5 +1,5 @@
 // Runs the simulation in index.html without a browser and prints what happened.
-//   node bench.js [ticks] [cols] [rows] [busy]     the default is the calm mode
+//   node bench.js [ticks] [cols] [rows] [outbreak]     the default is the calm mode
 //   node bench.js --check        quick pass/fail, used by CI
 // Use it to check a change: every outbreak should still get eaten, and the
 // numbers should not drift far from the last run unless you meant them to.
@@ -11,7 +11,7 @@ const args = process.argv.slice(2).filter(a => a !== '--check');
 const ticks = +args[0] || (check ? 80000 : 200000);
 const gridCols = +args[1] || 90;
 const gridRows = +args[2] || 60;
-const busy = args[3] === 'busy';
+const outbreak = args[3] === 'outbreak';
 
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 const script = html.slice(html.indexOf('<script>') + 8, html.lastIndexOf('</script>'));
@@ -35,7 +35,7 @@ global.performance = { now: () => 0 };
 
 new Function(script)();
 const s = global.snake;
-s.setAmbient(!busy);
+s.setAmbient(!outbreak);
 
 // things that must be true at any moment
 const failures = [];
