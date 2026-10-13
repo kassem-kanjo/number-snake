@@ -40,11 +40,13 @@ s.setAmbient(!outbreak);
 // things that must be true at any moment
 const failures = [];
 function audit(t) {
+  // the page picks its own grid from the window it is given, so ask it for the size
   const cells = s.colonies.reduce((n, c) => n + c.count, 0);
-  if (cells !== Math.round(s.infected * gridCols * gridRows)) failures.push(`tick ${t}: colony cell counts (${cells}) disagree with the infected total`);
+  if (cells !== Math.round(s.infected * s.area)) failures.push(`tick ${t}: colony cell counts (${cells}) disagree with the infected total`);
   for (const c of s.colonies) {
     if (new Set(c.cells).size !== c.cells.length) failures.push(`tick ${t}: colony ${c.id} lists a cell twice`);
     if (!(c.energy <= c.budget)) failures.push(`tick ${t}: colony ${c.id} gained energy`);
+    if (c.cells.some(i => !(i >= 0 && i < s.area))) failures.push(`tick ${t}: colony ${c.id} holds a cell off the grid`);
   }
   for (const h of s.heads) {
     if (![h.x, h.y, h.a, h.R, h.v].every(Number.isFinite)) failures.push(`tick ${t}: a head has a non-number in its state`);

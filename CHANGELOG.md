@@ -11,7 +11,13 @@ Notable changes to Number Snake. The format follows [Keep a Changelog](https://k
 - A screensaver view (`saver=1` in the address): the grid and nothing else, ignoring input.
 - Fullscreen (F or the Fullscreen button): nothing but the grid, with the controls hidden while the mouse is still.
 
+### Fixed
+- The control panel clipping when its text grew, staying open after a click, and its hover area blocking the grid beneath it.
+- `bench.js --check` failing falsely on grids other than 90 by 60.
+- Fullscreen on older Safari; the grid being laid out twice when entering or leaving fullscreen.
+
 ### Changed
+- A run link saved before the calm pace became the default replays at the calm pace, so it will not match the run it was copied from.
 - The calm pace is now the default. The former normal pace is now called Outbreak and has its own button; run links carry `outbreak=1` instead of `ambient=1`.
 - The control bar is now a pinhole at the bottom of the window that opens into a panel on hover. The grid uses the freed space.
 - `bench.js` tests the calm mode by default; pass `outbreak` for outbreak mode.

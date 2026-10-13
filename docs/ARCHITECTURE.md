@@ -31,7 +31,7 @@ The grid is `cols` by `rows`. Every per-cell value is a typed array indexed by `
 
 **Colonies** (`colonies`, and `byId` for lookup)
 
-- `traits` is the rolled nature; the same values are copied onto the colony for speed.
+- `traits` is the rolled nature. Most values are also copied onto the colony for speed; greed is not, because it only sets the starting `budget`.
 - `cells` is a list of indices that may contain dead entries; `held` is the matching Set that stops an index being listed twice. Always test a cell with `alive(c, i)`. Both are rebuilt together when the list gets too stale.
 - `count` is the true number of living cells. `energy` is how many more cells it may ever grow.
 
@@ -54,7 +54,7 @@ Drawing happens separately, once per animation frame in which at least one tick 
 
 - **The fresh trail blocks infection.** `pickFrontier` refuses any creature cell with more than `BARRIER` of its life left, for growth and for retreat alike.
 - **Infections cannot win.** Growth only ever spends `energy`, spores hand over part of the parent's energy, and nothing adds energy. The creature gets stronger with `heat`.
-- **Seeded runs replay exactly.** Tick logic uses only `random()`. `Math.random()` is used once, to pick a seed. Drawing and hover code must not call `random()` or change simulation state. User input (steering, double-click) is allowed to change a run.
+- **Seeded runs replay exactly.** Tick logic uses only `random()`. `Math.random()` is used only to pick a seed, in `reset`, when the address did not ask for one. Drawing and hover code must not call `random()` or change simulation state. User input (steering, double-click) is allowed to change a run.
 - **Bookkeeping stays consistent.** `infected` equals the number of cells with `germ > 0`; each colony's `count` equals the cells it owns. Only `addCell` and `removeCell` change these.
 - **Nothing is chosen from a list of types.** Behaviour comes from continuous traits and rolled plans. A new behaviour should be a new trait or a new plan dimension, not a new named kind.
 
