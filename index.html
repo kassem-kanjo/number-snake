@@ -73,7 +73,7 @@
   let life, born, num, edge, vigor, tint, hurt;
   let germ, germHit, owner;
   let colonies, byId, nextId, infected, pressure, pressureGoal, pressureTimer;
-  let arcs, stain, motes;
+  let arcs, stain, motes, scar;
   const born_ = [];   // spores that landed this tick
   let tickNo, heads, head, target = null;   // `head` is whichever head is acting right now
   let paused = false;
@@ -135,6 +135,7 @@
     owner = new Int32Array(n);     // which colony the infected cell belongs to
     colonies = [];
     arcs = [];
+    scar = new Int32Array(n);      // where infection was eaten stays faintly marked for a while
     motes = [];                    // flecks thrown off when a colony dies
     stain = new Int32Array(n);     // creature cells that just swallowed something
     byId = new Map();
@@ -161,6 +162,7 @@
       anger: 0,         // rises when bites bounce off armour
       heat: 0,          // anger plus how much of the grid is infected
       memory: [],       // where it last fed
+      stretch: 1,
       vitality: 1,      // a split-off head withers once things calm down
     };
   }
@@ -755,7 +757,12 @@
   function stampHead() {
     const h = head;
     const gap = HIT_GAP * (1 - 0.7 * Math.min(1, h.heat));
-    const reach = h.R * 1.2 + 1;
+    // it stretches out along its heading when it moves fast and sits squat when still
+    h.stretch += (clamp(1 + 0.3 * (Math.abs(h.v) / STEP - 1), 0.85, 1.9) - h.stretch) * 0.2;
+    const long = h.stretch, wide = 1 / Math.sqrt(long);
+    const ca = Math.cos(h.a), sa = Math.sin(h.a);
+    const w2 = 0.05 + 0.1 * h.restless, w5 = 0.03 + 0.06 * h.arousal;
+    const reach = h.R * 1.4 * long + 1;
     const x0 = Math.max(0, Math.floor(h.x - reach)), x1 = Math.min(cols - 1, Math.floor(h.x + reach));
     const y0 = Math.max(0, Math.floor(h.y - reach)), y1 = Math.min(rows - 1, Math.floor(h.y + reach));
     let ate = 0;
@@ -763,14 +770,17 @@
       for (let x = x0; x <= x1; x++) {
         const i = y * cols + x;
         const dx = x + 0.5 - h.x, dy = y + 0.5 - h.y;
-        const rim = h.R * (1 + 0.16 * Math.sin(3 * Math.atan2(dy, dx) + h.lobe));
-        const u = (Math.hypot(dx, dy) - edge[i]) / rim;
+        // the outline is a few slow waves of different counts running round the rim
+        const th = Math.atan2(dy, dx);
+        const rim = h.R * (1 + 0.16 * Math.sin(3 * th + h.lobe) + w2 * Math.sin(2 * th - 0.6 * h.lobe) + w5 * Math.sin(5 * th + 1.7 * h.lobe));
+        const along = (dx * ca + dy * sa) / long, across = (dy * ca - dx * sa) / wide;
+        const u = (Math.hypot(along, across) - edge[i]) / rim;
         if (u >= 1) continue;
         if (germ[i] && u < 0.85 && tickNo - germHit[i] > gap) {
           // one layer per pass: armoured cells take several attacks
           germHit[i] = tickNo;
           const c = byId.get(owner[i]);
-          if (germ[i] === 1) { removeCell(c, i); ate++; stain[i] = tickNo + rand(8, 30); }
+          if (germ[i] === 1) { removeCell(c, i); ate++; stain[i] = tickNo + rand(8, 30); scar[i] = tickNo + rand(300, 900); }
           else { germ[i]--; c.blocked++; }
         }
         const inward = 1 - Math.max(u, 0);
@@ -905,6 +915,12 @@
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
         const i = y * cols + x;
+        if (scar[i] > tickNo && life[i] <= 0 && !germ[i]) {
+          ctx.globalAlpha = 0.55 * Math.min(1, (scar[i] - tickNo) / 300);
+          ctx.fillStyle = '#f3b9c6';
+          ctx.fillRect(x * px, y * px, px, px);
+          ctx.globalAlpha = 1;
+        }
         if (life[i] <= 0 || germ[i]) continue;
         ctx.fillStyle = hurt[i] > tickNo ? (hash(i, slot) % 5 < 3 ? BLACK : RED)
           : stain[i] > tickNo ? STAIN[Math.min(2, (stain[i] - tickNo) >> 3)]
