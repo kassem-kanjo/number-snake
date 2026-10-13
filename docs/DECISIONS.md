@@ -4,6 +4,9 @@ What was decided, why, and what was tried and thrown away. Newest first. Benchma
 
 ## 2026-10-13
 
+### Calm is the default; controls are a pinhole
+The owner asked for the calm pace by default, with the busy pace behind a button, and for the controls to collapse into a small dot that opens on hover. The panel overlays the bottom of the grid while open rather than reserving space, so the grid never jumps. Benchmark names changed to match: no argument is calm, `busy` is the old normal. Numbers per mode are unchanged by this (calm: about 75 outbreaks per 100,000 ticks, idle 74%; busy: about 290, idle 31%).
+
 ### Roadmap review
 The owner chose three ideas to build (fullscreen, the trail as a barrier, a second species that circles and crushes) and turned down four: infections that merge or fight, the creature changing with what it eats, painting infection by dragging, and a timeline strip. Those issues are closed as not planned. The project is public under the MIT licence.
 

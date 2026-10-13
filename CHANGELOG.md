@@ -6,6 +6,12 @@ Notable changes to Number Snake. The format follows [Keep a Changelog](https://k
 
 ### Added
 - MIT licence.
+- Fullscreen (F or the Fullscreen button): nothing but the grid, with the controls hidden while the mouse is still.
+
+### Changed
+- The calm pace is now the default. The former normal pace is the Busy button, and run links carry `busy=1` instead of `ambient=1`.
+- The control bar is now a pinhole at the bottom of the window that opens into a panel on hover. The grid uses the freed space.
+- `bench.js` tests the calm mode by default; pass `busy` for busy mode.
 
 ## [0.1.0] - 2026-10-13
 

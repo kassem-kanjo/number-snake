@@ -7,9 +7,32 @@
 <style>
   html, body { margin: 0; height: 100%; background: #0b0b0c; overflow: hidden; }
   body { display: flex; flex-direction: column; font: 13px/1 -apple-system, "Helvetica Neue", Arial, sans-serif; color: #9a9aa0; }
-  #stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 16px 16px 8px; }
+  #stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 16px 16px 34px; }
   canvas { background: #fff; border-radius: 14px; touch-action: none; cursor: crosshair; }
-  #bar { display: flex; gap: 14px; align-items: center; justify-content: center; padding: 6px 16px 14px; flex-wrap: wrap; }
+  /* The controls rest as a pinhole at the bottom and open into a panel when
+     you reach for them. The dock is a generous invisible target around it. */
+  #dock { position: fixed; left: 50%; bottom: 0; z-index: 4; transform: translateX(-50%); padding: 22px 70px 11px; transition: opacity .6s; }
+  #bar { position: relative; box-sizing: border-box; margin: 0 auto; overflow: hidden;
+         width: 12px; height: 12px; border-radius: 999px; background: #7d7d86; border: 1px solid transparent; opacity: .55;
+         animation: breathe 4.5s ease-in-out infinite;
+         transition: width .6s cubic-bezier(.22,1,.36,1), height .6s cubic-bezier(.22,1,.36,1), border-radius .6s cubic-bezier(.22,1,.36,1),
+                     background-color .4s, border-color .4s, opacity .4s, box-shadow .6s; }
+  #panel { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(.92); width: max-content; max-width: calc(100vw - 64px);
+           display: flex; flex-direction: column; align-items: center; gap: 10px; opacity: 0; pointer-events: none;
+           transition: opacity .2s, transform .6s cubic-bezier(.22,1,.36,1); }
+  #panel .row { display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap; }
+  #dock:hover #bar, #dock.open #bar, #dock:focus-within #bar {
+    width: var(--open-w, 600px); height: var(--open-h, 84px); border-radius: 18px; background: #141417; border-color: #2c2c31; opacity: 1;
+    box-shadow: 0 10px 34px rgba(0,0,0,.55); animation: none; }
+  #dock:hover #panel, #dock.open #panel, #dock:focus-within #panel {
+    opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); transition: opacity .35s .18s, transform .6s cubic-bezier(.22,1,.36,1); }
+  @keyframes breathe { 50% { opacity: .9; box-shadow: 0 0 0 5px rgba(125,125,134,.13); } }
+  @media (prefers-reduced-motion: reduce) { #bar, #panel { animation: none; transition-duration: .01s; } }
+  /* fullscreen: nothing but the grid, and even the pinhole goes while the mouse is still */
+  body.fs #stage { padding: 0; }
+  body.fs canvas { border-radius: 0; }
+  body.quiet #dock { opacity: 0; }
+  body.quiet canvas { cursor: none; }
   button { font: inherit; color: #ddd; background: #1c1c20; border: 1px solid #333; border-radius: 7px; padding: 7px 12px; cursor: pointer; }
   button:hover { background: #26262b; }
   button.live { border-color: #e3122b; color: #ff8a98; }
@@ -17,9 +40,6 @@
   input[type=range] { width: 120px; accent-color: #2f6fe4; }
   .hint { opacity: .7; }
   button.on { border-color: #2f6fe4; color: #9fc0ff; }
-  /* in ambient mode the controls fade back until you reach for them */
-  body.ambient #bar { opacity: .18; transition: opacity .4s; }
-  body.ambient #bar:hover { opacity: 1; }
   #seed { color: inherit; text-decoration: none; border-bottom: 1px dotted #555; }
   #tip { position: fixed; left: 0; top: 0; z-index: 5; display: none; width: 236px; box-sizing: border-box; padding: 9px 10px;
          background: #141417; border: 1px solid #333; border-radius: 8px; color: #c4c4ca; font-size: 11px; line-height: 1;
@@ -37,15 +57,22 @@
 <body>
 <div id="stage"><canvas id="c"></canvas></div>
 <div id="tip"></div>
-<div id="bar">
-  <button id="pause">Pause</button>
-  <button id="restart">Restart</button>
-  <button id="record" title="Save a video clip of the grid">Record</button>
-  <button id="ambient" title="A calmer pace for leaving it running">Ambient</button>
-  <label>Speed <input id="speed" type="range" min="4" max="140" value="55"></label>
-  <a id="seed" class="hint" title="Link to this exact run"></a>
-  <span id="tally" class="hint"></span>
-  <span class="hint">hold to steer · double-click to infect · hover anything to inspect · space pauses · R restarts</span>
+<div id="dock">
+  <div id="bar">
+    <div id="panel">
+      <div class="row">
+        <button id="pause">Pause</button>
+        <button id="restart">Restart</button>
+        <button id="record" title="Save a video clip of the grid">Record</button>
+        <button id="busy" title="More, bigger and faster infections, several at once">Busy</button>
+        <button id="full" title="Nothing but the grid (F)">Fullscreen</button>
+        <label>Speed <input id="speed" type="range" min="4" max="140" value="55"></label>
+        <a id="seed" class="hint" title="Link to this exact run"></a>
+        <span id="tally" class="hint"></span>
+      </div>
+      <div class="row hint">hold to steer · double-click to infect · hover anything to inspect · space pauses · R restarts · F fullscreen</div>
+    </div>
+  </div>
 </div>
 <script>
 (() => {
@@ -100,10 +127,10 @@
   const query = new URLSearchParams(typeof location === 'undefined' ? '' : location.search);
   let asked = parseInt(query.get('seed'), 10);
 
-  // Ambient mode is for leaving it running: outbreaks are rarer, smaller and
-  // slower, at most two at a time, and everything moves at an easier pace.
-  let ambient = query.get('ambient') === '1';
-  const seedHref = () => '?seed=' + seed + (ambient ? '&ambient=1' : '');
+  // The default pace is calm, for leaving it running: outbreaks are rare,
+  // small and slow, at most two at a time. Busy mode lifts all of that.
+  let ambient = query.get('busy') !== '1';
+  const seedHref = () => '?seed=' + seed + (ambient ? '' : '&busy=1');
   const seedLink = document.getElementById('seed');
   const tally = document.getElementById('tally');
 
@@ -180,7 +207,8 @@
   }
 
   function layout() {
-    const w = stage.clientWidth - 32, h = stage.clientHeight - 24;
+    const full = !!document.fullscreenElement;
+    const w = stage.clientWidth - (full ? 0 : 32), h = stage.clientHeight - (full ? 0 : 50);
     const px2 = Math.max(9, Math.min(13, Math.round(Math.min(w, h) / 78)));
     const cols2 = Math.max(12, Math.floor(w / px2)), rows2 = Math.max(12, Math.floor(h / px2));
     if (heads && px2 === px && cols2 === cols && rows2 === rows) return;   // same grid: keep the run
@@ -1101,6 +1129,7 @@
       togglePause();
     }
     if (e.key === 'r' || e.key === 'R') restart();
+    if (e.key === 'f' || e.key === 'F') toggleFull();
   });
 
   function pointAt(e) {
@@ -1250,18 +1279,54 @@
     recordBtn.classList.add('live');
   };
 
-  const ambientBtn = document.getElementById('ambient');
+  const busyBtn = document.getElementById('busy');
   function setAmbient(on) {
     ambient = on;
-    ambientBtn.classList.toggle('on', on);
-    if (document.body) document.body.classList.toggle('ambient', on);
+    busyBtn.classList.toggle('on', !on);
     seedLink.href = seedHref();
   }
-  ambientBtn.onclick = () => setAmbient(!ambient);
+  busyBtn.onclick = () => setAmbient(!ambient);
   setAmbient(ambient);
 
+  // The panel opens to whatever size its contents need.
+  const dock = document.getElementById('dock');
+  const bar = document.getElementById('bar');
+  const panel = document.getElementById('panel');
+  function sizePanel() {
+    bar.style.setProperty('--open-w', panel.offsetWidth + 40 + 'px');
+    bar.style.setProperty('--open-h', panel.offsetHeight + 36 + 'px');
+  }
+  sizePanel();
+  // on a touch screen a tap opens it and a touch on the grid closes it
+  dock.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' || dock.classList.contains('open')) return;
+    dock.classList.add('open');
+    e.preventDefault();
+  });
+  canvas.addEventListener('pointerdown', () => dock.classList.remove('open'));
+
+  // Fullscreen shows nothing but the grid; the pinhole comes back when the mouse moves.
+  function toggleFull() {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+  }
+  document.getElementById('full').onclick = toggleFull;
+  let quietTimer;
+  function stir() {
+    if (!document.body) return;
+    document.body.classList.remove('quiet');
+    clearTimeout(quietTimer);
+    if (document.fullscreenElement) quietTimer = setTimeout(() => document.body.classList.add('quiet'), 2500);
+  }
+  addEventListener('mousemove', stir);
+  addEventListener('fullscreenchange', () => {
+    document.body.classList.toggle('fs', !!document.fullscreenElement);
+    stir();
+    layout();
+  }, true);
+
   let resizeTimer;
-  addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(layout, 150); });
+  addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { sizePanel(); layout(); }, 150); });
 
   // for poking at it from the browser console
   window.snake = {

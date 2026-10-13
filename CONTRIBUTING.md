@@ -13,10 +13,10 @@
 ## Checking a change
 
 ```bash
-node bench.js 200000
+node bench.js 200000 90 60 busy
 ```
 
-Run it before and after, at least twice each, because every run uses a new seed. Compare against these expectations for normal mode on the default 90 by 60 grid:
+Run it before and after, at least twice each, because every run uses a new seed. Busy mode is the demanding one, so it is the one to compare. Expectations on the default 90 by 60 grid:
 
 | Field | Healthy range |
 |---|---|
@@ -28,16 +28,20 @@ Run it before and after, at least twice each, because every run uses a new seed.
 
 A change is suspect if it moves `lifeMedian` or `life90` by more than about 25%, or pushes `idlePct` below about 22. Record what you measured in `docs/DECISIONS.md`, including for ideas that were dropped.
 
-For ambient mode:
+For the calm default (expect far fewer outbreaks, the creature idle around 70 to 75% of the time, and infection under about 10% of the grid):
 
 ```bash
-node bench.js 200000 90 60 ambient
+node bench.js 200000
 ```
 
-The quick pass/fail version, used by CI:
+The quick pass/fail version, which CI runs in both modes:
 
 ```bash
 node bench.js --check
+```
+
+```bash
+node bench.js --check 80000 90 60 busy
 ```
 
 It fails if the script throws, if bookkeeping drifts, if no outbreak is cleared, or if an outbreak survives far longer than any normal one.

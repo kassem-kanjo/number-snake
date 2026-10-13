@@ -13,7 +13,7 @@ The script is one closure, split by banner comments into these sections, in orde
 | Creature | Steering helpers, `idle`, `makePlan`, `engage`, `moveHead`, `stampHead`, `divide`, `manageHeads`, `tick` |
 | Drawing | `draw` and the colony drawing helpers |
 | Controls | The frame loop, buttons, keys, pointer steering, double-click planting |
-| Hover inspector | The panel for colonies and heads, then Record, Ambient and resize handling |
+| Hover inspector | The panel for colonies and heads, then Record, the Busy switch, the pinhole dock, fullscreen and resize handling |
 
 ## Data model
 
