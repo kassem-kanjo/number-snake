@@ -42,6 +42,7 @@
   const INK  = ['#06163f', '#06404a', '#221463', '#0d4a35', '#b9c6ff'];
   const BANDS = [0.72, 0.52, 0.34, 0.17];   // life fractions where the colour changes
 
+  const STAIN = ['#6a5bd0', '#8e3f9e', '#b3245f'];   // a swallowed cell dissolving, last to first
   const BLACK = '#0a0a0a', RED = '#e3122b', BLOOD = '#7a0613', PINK = '#ff5a6e';
   const GLYPH_POOL = '0123456789#X%/\\<>=+*?!:;[]{}^~';
 
@@ -57,6 +58,8 @@
   let life, born, num, edge, vigor, tint, hurt;
   let germ, germHit, owner;
   let colonies, byId, nextId, infected, pressure, pressureGoal, pressureTimer;
+  let arcs, stain;
+  const born_ = [];   // spores that landed this tick
   let path, tickNo, head, target = null;
   let paused = false;
 
@@ -98,6 +101,8 @@
     germHit = new Int32Array(n).fill(-1e9);   // tick the cell last lost a layer
     owner = new Int32Array(n);     // which colony the infected cell belongs to
     colonies = [];
+    arcs = [];
+    stain = new Int32Array(n);     // creature cells that just swallowed something
     byId = new Map();
     nextId = 1;
     infected = 0;
@@ -141,34 +146,83 @@
   // Every colony gets its own nature. The traits are independent sliders, so
   // "a runner" or "a fighter" is never chosen: a colony just happens to be
   // timid, or armoured, or spiteful, or hungry for space, in any mixture.
-  function rollColony() {
-    const budget = 20 * Math.pow(area * 0.55 / 20, skew(2.4));
-    const spite = skew(2.2);
-    const nerve = skew(2.4);
-    const greed = budget / (area * 0.55);
+  const TRAITS = {            // [lowest, highest]
+    greed:  [0, 1],           // how much of the grid it could ever cover
+    growth: [0.4, 5],         // cells per tick
+    armour: [0, 1],           // chance of extra layers on each cell
+    spite:  [0, 1],           // how readily, and how often, it hits back
+    nerve:  [0, 1],           // how readily it backs away
+    tips:   [0, 1],           // 0 grows as a lump, 1 grows as tendrils
+    lure:   [-1, 1],          // grows toward (+) or away from (-) the creature
+    drive:  [0, 1],           // creeps in one direction
+    spore:  [0, 1],           // how readily it throws off offspring
+  };
+
+  function rollTraits() {
+    return {
+      greed: skew(2.4), growth: 0.4 + 4.6 * skew(1.6), armour: skew(2.2),
+      spite: skew(2.2), nerve: skew(2.4), tips: Math.random(),
+      lure: rand(-1, 1), drive: skew(2), spore: skew(3),
+    };
+  }
+
+  // a child is its parent with every trait nudged
+  function mutate(t) {
+    const m = {};
+    for (const k in TRAITS) {
+      const [lo, hi] = TRAITS[k];
+      m[k] = clamp(t[k] + rand(-0.12, 0.12) * (hi - lo), lo, hi);
+    }
+    return m;
+  }
+
+  function buildColony(t, budget) {
+    const most = area * 0.55;
+    if (budget === undefined) budget = 20 * Math.pow(most / 20, t.greed);
+    const share = budget / most;
     const pool = GLYPH_POOL.split('').sort(() => Math.random() - 0.5);
     const c = {
-      id: nextId++, cells: [], count: 0, age: 0, acc: 0, blocked: 0,
+      id: nextId++, traits: t, gen: 0, cells: [], count: 0, age: 0, acc: 0, blocked: 0,
       budget, energy: budget,            // cells it can ever grow; it can't win, it runs dry
-      growth: (0.4 + 4.6 * skew(1.6)) * (1 + 4 * greed),   // cells per tick
-      armour: skew(2.2),                 // chance of extra layers on each cell
-      spite, fury: spite * 4,            // how readily, and how often, it hits back
-      nerve, stamina: 1,                 // how readily it backs away, until it tires
-      tips: Math.random(),               // 0 grows as a lump, 1 grows as tendrils
-      lure: rand(-1, 1),                 // grows toward (+) or away from (-) the creature
-      drive: skew(2), heading: rand(0, Math.PI * 2),   // creeps in one direction
+      growth: t.growth * (1 + 4 * share),
+      armour: t.armour,
+      spite: t.spite, fury: t.spite * 4,
+      nerve: t.nerve, stamina: 1,        // it tires as it runs
+      tips: t.tips, lure: t.lure,
+      drive: t.drive, heading: rand(0, Math.PI * 2),
+      spore: t.spore,
       noticed: false, near: Infinity, nearest: 0, cx: 0, cy: 0,
       x0: 0, x1: 0, y0: 0, y1: 0,
     };
     // its look follows from its nature, so you can read it before it acts
     c.look = {
-      slot: Math.max(1, Math.round(10 - 8 * nerve + rand(-1, 1))),    // jumpy ones flicker fast
-      red: clamp(0.3 + 0.5 * greed + 0.3 * (c.growth / 8) + rand(-0.12, 0.12), 0.15, 0.95),
-      white: 0.1 + 0.7 * spite,                                       // spiteful ones spark white
-      tears: 0.15 + 0.85 * spite,
+      slot: Math.max(1, Math.round(10 - 8 * t.nerve + rand(-1, 1))),    // jumpy ones flicker fast
+      red: clamp(0.3 + 0.5 * share + 0.3 * (c.growth / 8) + rand(-0.12, 0.12), 0.15, 0.95),
+      white: 0.1 + 0.7 * t.spite,                                       // spiteful ones spark white
+      tears: 0.15 + 0.85 * t.spite,
       glyphs: pool.slice(0, 2 + Math.floor(rand(0, 8))).join(''),
     };
     return c;
+  }
+
+  // A colony with the urge throws a spore: a child lands some way off with a
+  // share of the parent's remaining energy and a mutated copy of its nature.
+  function throwSpore(c) {
+    const a = rand(0, Math.PI * 2), d = rand(10, 30);
+    const x = clamp(Math.round(c.cx + Math.cos(a) * d), 3, cols - 4);
+    const y = clamp(Math.round(c.cy + Math.sin(a) * d), 3, rows - 4);
+    if (germ[y * cols + x]) return null;
+    const give = c.energy * rand(0.2, 0.5);
+    c.energy -= give;
+    const child = buildColony(mutate(c.traits), give);
+    child.gen = c.gen + 1;
+    child.look.glyphs = c.look.glyphs;   // family resemblance
+    byId.set(child.id, child);
+    addCell(child, x, y, 1);
+    child.energy--;
+    survey(child);
+    arcs.push({ x0: c.cx, y0: c.cy, x1: x + 0.5, y1: y + 0.5, until: tickNo + 14 });
+    return child;
   }
 
   function addCell(c, x, y, hp) {
@@ -324,7 +378,7 @@
       y = Math.floor(rand(6, rows - 6));
     } while ((germ[y * cols + x] || Math.hypot(x - head.x, y - head.y) < 25) && ++tries < 30);
     if (germ[y * cols + x]) return;
-    const c = rollColony();
+    const c = buildColony(rollTraits());
     colonies.push(c);
     byId.set(c.id, c);
     addCell(c, x, y, 1 + (Math.random() < c.armour));
@@ -344,7 +398,14 @@
         while (c.acc >= 1 && c.energy > 0) { c.acc--; growOne(c); }
       }
       if (c.count > 1) retreat(c);
+      if (c.count > 12 && c.energy > 30 && colonies.length + born_.length < MAX_COLONIES
+          && Math.random() < 0.01 * c.spore) {
+        const child = throwSpore(c);
+        if (child) born_.push(child);
+      }
     }
+    colonies.push(...born_);
+    born_.length = 0;
     for (const c of colonies) {
       if (c.count > 0) continue;
       head.memory.push({ x: c.cx, y: c.cy });
@@ -466,19 +527,29 @@
   // are just regions of this space, with everything in between.
   function makePlan(c) {
     const h = head, hot = Math.min(1, h.heat);
-    const strikeDist = rand(3, 22);
+    const roll = {
+      orbit: skew(1.8),          // 0 comes straight in, 1 circles
+      weave: rand(0, 0.9),
+      pace: rand(0.3, 1.3),      // approach speed
+      strikeDist: rand(3, 22),   // how close before it commits
+      windup: rand(6, 34),       // how long it coils
+      punch: rand(0.5, 1.4),     // how hard it strikes for that distance
+      wide: rand(0.5, 1.1),      // how wide it opens for that size of prey
+      over: rand(4, 14),         // how far past it carries
+      rest: rand(10, 55),
+    };
     return {
-      orbit: skew(1.8),                         // 0 comes straight in, 1 circles
+      orbit: roll.orbit,
       side: Math.random() < 0.5 ? 1 : -1,
-      weave: rand(0, 0.9), weaveRate: rand(0.03, 0.1), phase: rand(0, 6.3),
-      pace: rand(0.3, 1.3) * (1 + hot),         // approach speed
-      strikeDist,                               // how close before it commits
-      windup: rand(6, 34) / (1 + 2 * hot),      // how long it coils
+      weave: roll.weave, weaveRate: rand(0.03, 0.1), phase: rand(0, 6.3),
+      pace: roll.pace * (1 + hot),
+      strikeDist: roll.strikeDist,
+      windup: roll.windup / (1 + 2 * hot),
       tense: rand(2.5, 4.5),                    // how small it draws itself
-      burst: clamp(strikeDist / 7 * rand(0.5, 1.4), 0.08, 3.3) * (1 + 0.5 * hot),
-      gape: clamp(Math.sqrt(c.count) * rand(0.5, 1.1) + rand(2, 5), 4, 13),
-      over: rand(4, 14),                        // how far past it carries
-      rest: rand(10, 55) / (1 + 2 * hot),
+      burst: clamp(roll.strikeDist / 7 * roll.punch, 0.08, 3.3) * (1 + 0.5 * hot),
+      gape: clamp(Math.sqrt(c.count) * roll.wide + rand(2, 5), 4, 13),
+      over: roll.over,
+      rest: roll.rest / (1 + 2 * hot),
       patience: rand(80, 260),
     };
   }
@@ -638,7 +709,7 @@
           // one layer per pass: armoured cells take several attacks
           germHit[i] = tickNo;
           const c = byId.get(owner[i]);
-          if (germ[i] === 1) { removeCell(c, i); ate++; }
+          if (germ[i] === 1) { removeCell(c, i); ate++; stain[i] = tickNo + rand(8, 30); }
           else { germ[i]--; c.blocked++; }
         }
         const inward = 1 - Math.max(u, 0);
@@ -736,12 +807,26 @@
       for (let x = 0; x < cols; x++) {
         const i = y * cols + x;
         if (life[i] <= 0 || germ[i]) continue;
-        ctx.fillStyle = hurt[i] > tickNo ? (hash(i, slot) % 5 < 3 ? BLACK : RED) : FILL[band(i)];
+        ctx.fillStyle = hurt[i] > tickNo ? (hash(i, slot) % 5 < 3 ? BLACK : RED)
+          : stain[i] > tickNo ? STAIN[Math.min(2, (stain[i] - tickNo) >> 3)]
+          : FILL[band(i)];
         ctx.fillRect(x * px, y * px, px, px);
       }
     }
 
     drawColonies();
+
+    // spores in flight
+    arcs = arcs.filter(a => a.until > tickNo);
+    ctx.fillStyle = RED;
+    for (const a of arcs) {
+      const t = 1 - (a.until - tickNo) / 14;
+      for (let k = 0; k < 3; k++) {
+        const u = clamp(t - k * 0.08, 0, 1);
+        const x = a.x0 + (a.x1 - a.x0) * u, y = a.y0 + (a.y1 - a.y0) * u - Math.sin(u * Math.PI) * 4;
+        ctx.fillRect(Math.floor(x) * px + px * 0.25, Math.floor(y) * px + px * 0.25, px * 0.5, px * 0.5);
+      }
+    }
 
     ctx.strokeStyle = '#1b2440';
     ctx.lineWidth = 0.5;
@@ -813,7 +898,7 @@
     get head() { return head; },
     get colonies() { return colonies; },
     get infected() { return infected / area; },
-    tick, draw,
+    tick, draw, restart,
   };
 
   layout();
