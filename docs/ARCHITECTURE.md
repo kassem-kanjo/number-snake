@@ -40,6 +40,7 @@ The grid is `cols` by `rows`. Every per-cell value is a typed array indexed by `
 
 - The creature is one or more heads. Each has a position, heading, radius, a `mode`, a `plan`, a `prey`, its own trail `path`, a `species` (its record from `SPECIES`), and inner state: `arousal`, `restless`, `fullness`, `anger`, `heat`, `sick`, `vitality`.
 - `root` is true for the two permanent heads: the hunter, which is always `heads[0]`, is steered by the mouse and is counted in the tally; and the warden. Withering (`vitality`) applies only to heads that are not root. A head made by `divide` inherits its parent's species.
+- A species with `hollow` above 0 has a ring for a body instead of a blob. Its heads carry `ring` (the current radius) and `gap` (the half-angle of the opening, centred on the heading; 0 is a closed circle), each with a goal it eases toward. `stampHead` lays only the cells on the ring, which live `glow` ticks, so a ring leaves no trail. During a strike the radius falls by `crush` per tick.
 - The global `head` points at whichever head is acting. `tick` sets it before `moveHead` and `stampHead`; `updateColonies` sets it to the head nearest each colony. Anything that reads `head` relies on that.
 
 ## Resizing
@@ -64,7 +65,7 @@ Drawing happens separately, once per animation frame in which at least one tick 
 - **Seeded runs replay exactly.** Tick logic uses only `random()`. `Math.random()` is used only to pick a seed, in `reset`, when the address did not ask for one. Drawing and hover code must not call `random()` or change simulation state. User input (steering, double-click) is allowed to change a run.
 - **Bookkeeping stays consistent.** `infected` equals the number of cells with `germ > 0`; each colony's `count` equals the cells it owns. Only `addCell` and `removeCell` change these.
 - **Nothing is chosen from a list of types.** A species is a record of numbers, not a named behaviour. Behaviour comes from continuous traits and rolled plans. A new behaviour should be a new trait or a new plan dimension, not a new named kind or species.
-- **Behaviour is not chosen by species name.** Species differ only through the numbers in `SPECIES`: palette, the ranges plans are rolled from, and temperament. A value of 0 switches a behaviour off (the hunter's circling ranges are 0 to 0, and the warden's chance of dividing is 0). No code tests a species name.
+- **Behaviour is not chosen by species name.** Species differ only through the numbers in `SPECIES`: palette, the ranges plans are rolled from, and temperament. A value of 0 switches a behaviour off (the hunter's `hollow` is 0, so it is a solid blob, and the warden's chance of dividing is 0). No code tests a species name.
 
 ## Adding a trait
 

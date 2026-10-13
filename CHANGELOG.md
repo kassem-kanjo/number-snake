@@ -8,6 +8,7 @@ Notable changes to Number Snake. The format follows [Keep a Changelog](https://k
 - `skip=N` in the address starts a run N ticks in, so a link can open mid-action.
 
 ### Changed
+- The warden is rebuilt as a ring. It has no trail: it drifts as a thin circle, opens into a cup round an infection, closes, and claps shut. The first warden, a second blob that followed the edge of its prey, is gone.
 - Resizing the window, or entering and leaving fullscreen, no longer restarts the run. A bigger window adds empty grid round what is there; a smaller one pushes the defenders and infections back inside.
 - The README is shorter, leads with an image and links to play or download, and explains each trait alongside how to spot it. The benchmark's field list moved to CONTRIBUTING.md.
 
